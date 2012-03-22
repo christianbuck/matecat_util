@@ -100,7 +100,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('-ip', action='store', help='server ip to bind to, default: localhost', default="127.0.0.1")
     parser.add_argument('-port', action='store', help='server port to bind to, default: 8080', type=int, default=8080)
-    parser.add_argument('-nthreads', action='store', help='number of server threads, default: 10', type=int, default=8)
+    parser.add_argument('-nthreads', action='store', help='number of server threads, default: 8', type=int, default=8)
     parser.add_argument('-moses', dest="moses_path", action='store', help='path to moses executable', default="/home/buck/src/mosesdecoder/moses-cmd/src/moses")
     parser.add_argument('-options', dest="moses_options", action='store', help='moses options, including .ini -async-output -print-id', default="-f phrase-model/moses.ini -v 0 -threads 2 -async-output -print-id")
     args = parser.parse_args(sys.argv[1:])
