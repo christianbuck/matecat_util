@@ -91,9 +91,10 @@ class Root(object):
         self.queue.put((result_queue, "%s\n" %(q)))
         response = cherrypy.response
         response.headers['Content-Type'] = 'application/json'
-
         translation = result_queue.get()
-        return simplejson.dumps({"translation" : translation})
+        data = {"data" : {"translations" : [{"translatedText":translation}]}}
+
+        return simplejson.dumps(data)
 
 if __name__ == "__main__":
     import argparse
