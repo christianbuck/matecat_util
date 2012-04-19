@@ -15,8 +15,19 @@ def has_entities(s):
 
 n_fixed, n_lines, n_entities = 0, 0, 0
 if __name__ == "__main__":
-    sys.stdin = codecs.getreader(locale.getpreferredencoding())(sys.stdin)
-    sys.stdout = codecs.getwriter(locale.getpreferredencoding())(sys.stdout)
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-l', '-locale', action='store_true', dest="use_locale",
+                        help='use encoding of locale', default=False)
+    args = parser.parse_args(sys.argv[1:])
+
+    if args.use_locale:
+        sys.stdin = codecs.getreader(locale.getpreferredencoding())(sys.stdin)
+        sys.stdout = codecs.getwriter(locale.getpreferredencoding())(sys.stdout)
+    else:
+        sys.stdin = codecs.getreader('UTF-8')(sys.stdin)
+        sys.stdout = codecs.getwriter('UTF-8')(sys.stdout)
+
     for linenr, line in enumerate(sys.stdin):
         n_lines += 1
         n = has_entities(line)
