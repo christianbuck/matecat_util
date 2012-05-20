@@ -6,6 +6,10 @@ import subprocess
 import cherrypy
 import simplejson
 
+def popen(cmd):
+    cmd = cmd.split()
+    sys.stderr.write("executing: %s\n" %(" ".join(cmd)))
+    return subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
 
 class WriteThread(threading.Thread):
     def __init__(self, p_in, source_queue, web_queue):
@@ -57,9 +61,7 @@ class ReadThread(threading.Thread):
 
 class MosesProc(object):
     def __init__(self, cmd):
-        cmd = cmd.split()
-        sys.stderr.write("executing: %s\n" %(" ".join(cmd)))
-        self.proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+        self.proc = popen(cmd)
 
         self.source_queue = Queue.Queue()
         self.target_queue = Queue.PriorityQueue()
@@ -81,17 +83,45 @@ class MosesProc(object):
         print "target_queue empty: ", self.target_queue.empty()
 
 class Root(object):
-    def __init__(self, queue):
+    def __init__(self, queue, prepro_cmd=None, postpro_cmd=None):
+        print prepro_cmd
         self.queue = queue
+        self.prepro_cmd = []
+        if prepro_cmd != None:
+            self.prepro_cmd = prepro_cmd
+        self.postpro_cmd = []
+        if postpro_cmd != None:
+            self.postpro_cmd = postpro_cmd
+
+    def _pipe(self, proc, s):
+        proc.stdin.write("%s\n" %s)
+        proc.stdin.flush()
+        return proc.stdout.readline().rstrip()
+
+    def _prepro(self, query):
+        if not hasattr(cherrypy.thread_data, 'prepro'):
+            cherrypy.thread_data.prepro = map(popen, self.prepro_cmd)
+        for proc in cherrypy.thread_data.prepro:
+            query = self._pipe(proc, query)
+        return query
+
+    def _postpro(self, query):
+        if not hasattr(cherrypy.thread_data, 'postpro'):
+            cherrypy.thread_data.postpro = map(popen, self.postpro_cmd)
+        for proc in cherrypy.thread_data.postpro:
+            query = self._pipe(proc, query)
+        return query
 
     @cherrypy.expose
     def translate(self, q):
         print q
+        q = self._prepro(q)
         result_queue = Queue.Queue()
         self.queue.put((result_queue, "%s\n" %(q)))
         response = cherrypy.response
         response.headers['Content-Type'] = 'application/json'
         translation = result_queue.get()
+        translation = self._postpro(translation)
         data = {"data" : {"translations" : [{"translatedText":translation}]}}
 
         return simplejson.dumps(data)
@@ -104,6 +134,8 @@ if __name__ == "__main__":
     parser.add_argument('-nthreads', action='store', help='number of server threads, default: 8', type=int, default=8)
     parser.add_argument('-moses', dest="moses_path", action='store', help='path to moses executable', default="/home/buck/src/mosesdecoder/moses-cmd/src/moses")
     parser.add_argument('-options', dest="moses_options", action='store', help='moses options, including .ini -async-output -print-id', default="-f phrase-model/moses.ini -v 0 -threads 2 -async-output -print-id")
+    parser.add_argument('-prepro', action='store', nargs="+", help='complete call to preprocessing script including arguments')
+    parser.add_argument('-postpro', action='store', nargs="+", help='complete call to postprocessing script including arguments')
     args = parser.parse_args(sys.argv[1:])
 
     moses = MosesProc(" ".join((args.moses_path, args.moses_options)))
@@ -112,6 +144,6 @@ if __name__ == "__main__":
                             'server.socket_port': args.port,
                             'server.thread_pool': args.nthreads,
                             'server.socket_host': args.ip})
-    cherrypy.quickstart(Root(moses.source_queue))
+    cherrypy.quickstart(Root(moses.source_queue, args.prepro, args.postpro))
 
     moses.close()
