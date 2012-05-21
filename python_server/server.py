@@ -136,6 +136,7 @@ class Root(object):
     def translate(self, **kwargs):
         errors = self._check_params(kwargs)
         if errors:
+            cherrypy.response.status = 400
             return json.dumps(errors, sort_keys=True, indent=4)
         q = self._prepro(kwargs["q"])
         result_queue = Queue.Queue()
