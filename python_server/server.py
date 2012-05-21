@@ -82,7 +82,14 @@ class MosesProc(object):
         print "source_queue empty: ", self.source_queue.empty()
         print "target_queue empty: ", self.target_queue.empty()
 
+
+def json_error(status, message, traceback, version):
+    err = {"status":status, "message":message, "traceback":traceback, "version":version}
+    return simplejson.dumps(err, sort_keys=True, indent=4)
+
 class Root(object):
+    required_params = ["q", "key", "target"]
+
     def __init__(self, queue, prepro_cmd=None, postpro_cmd=None):
         print prepro_cmd
         self.queue = queue
@@ -92,6 +99,19 @@ class Root(object):
         self.postpro_cmd = []
         if postpro_cmd != None:
             self.postpro_cmd = postpro_cmd
+
+    def _check_params(self, params):
+        errors = []
+        missing = [p for p in self.required_params if not p in params]
+        for p in missing:
+            errors.append({"domain":"global","reason":"required","message":
+                "Required parameter: %s" %p, "locationType": "parameter",
+                "location": "%s" %p})
+        if errors:
+            return {"error": {"errors":errors,
+                              "code": 400,
+                              "message": "Required parameter: %s" %missing[0]}}
+        return None
 
     def _pipe(self, proc, s):
         proc.stdin.write("%s\n" %s)
@@ -113,9 +133,11 @@ class Root(object):
         return query
 
     @cherrypy.expose
-    def translate(self, q):
-        print q
-        q = self._prepro(q)
+    def translate(self, **kwargs):
+        errors = self._check_params(kwargs)
+        if errors:
+            return simplejson.dumps(errors, sort_keys=True, indent=4)
+        q = self._prepro(kwargs["q"])
         result_queue = Queue.Queue()
         self.queue.put((result_queue, "%s\n" %(q)))
         response = cherrypy.response
@@ -144,6 +166,7 @@ if __name__ == "__main__":
                             'server.socket_port': args.port,
                             'server.thread_pool': args.nthreads,
                             'server.socket_host': args.ip})
+    cherrypy.config.update({'error_page.default': json_error})
     cherrypy.quickstart(Root(moses.source_queue, args.prepro, args.postpro))
 
     moses.close()
