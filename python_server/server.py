@@ -4,7 +4,7 @@ import Queue
 import threading
 import subprocess
 import cherrypy
-import simplejson
+import json
 
 def popen(cmd):
     cmd = cmd.split()
@@ -85,7 +85,7 @@ class MosesProc(object):
 
 def json_error(status, message, traceback, version):
     err = {"status":status, "message":message, "traceback":traceback, "version":version}
-    return simplejson.dumps(err, sort_keys=True, indent=4)
+    return json.dumps(err, sort_keys=True, indent=4)
 
 class Root(object):
     required_params = ["q", "key", "target"]
@@ -136,7 +136,7 @@ class Root(object):
     def translate(self, **kwargs):
         errors = self._check_params(kwargs)
         if errors:
-            return simplejson.dumps(errors, sort_keys=True, indent=4)
+            return json.dumps(errors, sort_keys=True, indent=4)
         q = self._prepro(kwargs["q"])
         result_queue = Queue.Queue()
         self.queue.put((result_queue, "%s\n" %(q)))
@@ -146,7 +146,7 @@ class Root(object):
         translation = self._postpro(translation)
         data = {"data" : {"translations" : [{"translatedText":translation}]}}
 
-        return simplejson.dumps(data)
+        return json.dumps(data)
 
 if __name__ == "__main__":
     import argparse
