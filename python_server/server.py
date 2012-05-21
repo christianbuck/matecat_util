@@ -53,7 +53,10 @@ class ReadThread(threading.Thread):
             for idx, (id, q) in enumerate(result_queues):
                 print id, line[0]
                 if id == int(line[0]):
-                    q.put(line[1])
+                    if len(line) > 1:
+                        q.put(line[1])
+                    else:
+                        q.put("")
                     result_queues.pop(idx)
                     found = True
                     break
