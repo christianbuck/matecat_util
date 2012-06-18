@@ -5,6 +5,7 @@ import threading
 import subprocess
 import cherrypy
 import json
+import codecs
 
 def popen(cmd):
     cmd = cmd.split()
@@ -24,7 +25,7 @@ class WriteThread(threading.Thread):
             result_queue, source = self.source_queue.get()
             self.web_queue.put( (id, result_queue) )
             print "writing to process: ", repr(source)
-            self.pipe.write(source)
+            self.pipe.write(source.encode("utf-8"))
             self.pipe.flush()
             id += 1
             self.source_queue.task_done()
@@ -46,7 +47,7 @@ class ReadThread(threading.Thread):
                 assert self.web_queue.empty(), "still waiting for answers\n"
                 assert result_queues, "unanswered requests\n"
                 return
-            line = line.rstrip().split(" ", 1)
+            line = line.decode("utf-8").rstrip().split(" ", 1)
             print "reader read: ", repr(line)
 
             found = False
@@ -117,9 +118,10 @@ class Root(object):
         return None
 
     def _pipe(self, proc, s):
-        proc.stdin.write("%s\n" %s)
+        u_string = u"%s\n" %s
+        proc.stdin.write(u_string.encode("utf-8"))
         proc.stdin.flush()
-        return proc.stdout.readline().rstrip()
+        return proc.stdout.readline().decode("utf-8").rstrip()
 
     def _prepro(self, query):
         if not hasattr(cherrypy.thread_data, 'prepro'):
@@ -143,7 +145,7 @@ class Root(object):
             return json.dumps(errors, sort_keys=True, indent=4)
         q = self._prepro(kwargs["q"])
         result_queue = Queue.Queue()
-        self.queue.put((result_queue, "%s\n" %(q)))
+        self.queue.put((result_queue, u"%s\n" %(q)))
         response = cherrypy.response
         response.headers['Content-Type'] = 'application/json'
         translation = result_queue.get()
