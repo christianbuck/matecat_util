@@ -91,7 +91,7 @@ def json_error(status, message, traceback, version):
     return json.dumps(err, sort_keys=True, indent=4)
 
 class Root(object):
-    required_params = ["q", "key", "target"]
+    required_params = ["q", "key", "target", "source"]
 
     def __init__(self, queue, prepro_cmd=None, postpro_cmd=None):
         print prepro_cmd
