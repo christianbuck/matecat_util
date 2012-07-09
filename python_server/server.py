@@ -31,10 +31,9 @@ class WriteThread(threading.Thread):
             self.source_queue.task_done()
 
 class ReadThread(threading.Thread):
-    def __init__(self, p_out, target_queue, web_queue):
+    def __init__(self, p_out, web_queue):
         threading.Thread.__init__(self)
         self.pipe = p_out
-        self.target_queue = target_queue
         self.web_queue = web_queue
 
     def run(self):
@@ -69,14 +68,13 @@ class MosesProc(object):
         self.proc = popen(cmd)
 
         self.source_queue = Queue.Queue()
-        self.target_queue = Queue.PriorityQueue()
         self.web_queue = Queue.Queue()
 
         self.writer = WriteThread(self.proc.stdin, self.source_queue, self.web_queue)
         self.writer.setDaemon(True)
         self.writer.start()
 
-        self.reader = ReadThread(self.proc.stdout, self.target_queue, self.web_queue)
+        self.reader = ReadThread(self.proc.stdout, self.web_queue)
         self.reader.setDaemon(True)
         self. reader.start()
 
@@ -85,7 +83,6 @@ class MosesProc(object):
         self.proc.stdin.close()
         self.proc.wait()
         print "source_queue empty: ", self.source_queue.empty()
-        print "target_queue empty: ", self.target_queue.empty()
 
 
 def json_error(status, message, traceback, version):
