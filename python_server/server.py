@@ -20,14 +20,14 @@ class WriteThread(threading.Thread):
         self.web_queue = web_queue
 
     def run(self):
-        id = 0
+        i = 0
         while True:
             result_queue, source = self.source_queue.get()
-            self.web_queue.put( (id, result_queue) )
+            self.web_queue.put( (i, result_queue) )
             print "writing to process: ", repr(source)
             self.pipe.write(source.encode("utf-8"))
             self.pipe.flush()
-            id += 1
+            i += 1
             self.source_queue.task_done()
 
 class ReadThread(threading.Thread):
@@ -51,9 +51,9 @@ class ReadThread(threading.Thread):
             print "reader read: ", repr(line)
 
             found = False
-            for idx, (id, q) in enumerate(result_queues):
-                print id, line[0]
-                if id == int(line[0]):
+            for idx, (i, q) in enumerate(result_queues):
+                print i, line[0]
+                if i == int(line[0]):
                     if len(line) > 1:
                         q.put(line[1])
                     else:
