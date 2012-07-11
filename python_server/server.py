@@ -50,7 +50,7 @@ class ReadThread(threading.Thread):
             print "reader read: ", repr(line)
 
             found = False
-            print "looking for it %s in %s result queues" %(line[0], len(result_queues))
+            print "looking for id %s in %s result queues" %(line[0], len(result_queues))
             for idx, (i, q) in enumerate(result_queues):
                 print i, line[0]
                 if i == int(line[0]):
