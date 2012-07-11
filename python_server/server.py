@@ -137,15 +137,16 @@ class Root(object):
 
     @cherrypy.expose
     def translate(self, **kwargs):
+        response = cherrypy.response
+        response.headers['Content-Type'] = 'application/json'
         errors = self._check_params(kwargs)
         if errors:
             cherrypy.response.status = 400
             return json.dumps(errors, sort_keys=True, indent=4)
         q = self._prepro(kwargs["q"])
+        print "Request:", q
         result_queue = Queue.Queue()
         self.queue.put((result_queue, u"%s\n" %(q)))
-        response = cherrypy.response
-        response.headers['Content-Type'] = 'application/json'
         translation = result_queue.get()
         translation = self._postpro(translation)
         data = {"data" : {"translations" : [{"translatedText":translation}]}}
