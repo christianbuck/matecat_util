@@ -24,8 +24,9 @@ class WriteThread(threading.Thread):
         while True:
             result_queue, source = self.source_queue.get()
             self.web_queue.put( (i, result_queue) )
-            print "writing to process: ", repr(source)
-            self.pipe.write(source.encode("utf-8"))
+            wrapped_src = u"<seg id=%s>%s</seg>\n" %(i, source)
+            print "writing to process: ", repr(wrapped_src)
+            self.pipe.write(wrapped_src.encode("utf-8"))
             self.pipe.flush()
             i += 1
             self.source_queue.task_done()
@@ -139,15 +140,19 @@ class Root(object):
     def translate(self, **kwargs):
         response = cherrypy.response
         response.headers['Content-Type'] = 'application/json'
+
         errors = self._check_params(kwargs)
         if errors:
             cherrypy.response.status = 400
             return json.dumps(errors, sort_keys=True, indent=4)
+        print "Request:", kwargs["q"]
         q = self._prepro(kwargs["q"])
-        print "Request:", q
-        result_queue = Queue.Queue()
-        self.queue.put((result_queue, u"%s\n" %(q)))
-        translation = result_queue.get()
+        print "Request after preprocessing:", q
+        translation = ""
+        if q.strip():
+            result_queue = Queue.Queue()
+            self.queue.put((result_queue, q))
+            translation = result_queue.get()
         translation = self._postpro(translation)
         data = {"data" : {"translations" : [{"translatedText":translation}]}}
 
