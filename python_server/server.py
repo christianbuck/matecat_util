@@ -126,7 +126,7 @@ class Root(object):
         for key, val in self.expected_params.iteritems():
             assert key in params, "expected param %s" %key
             if params[key].lower() != val:
-                message = "expetect value for parameter '%s':'%s'" %(key,val)
+                message = "expetect value for parameter %s:'%s'" %(key,val)
                 errors.append({"domain":"global",
                                "reason":"invalid value: '%s'" %params[key],
                                "message":message,
