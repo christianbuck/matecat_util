@@ -93,7 +93,7 @@ def json_error(status, message, traceback, version):
 class Root(object):
     required_params = ["q", "key", "target", "source"]
 
-    def __init__(self, queue, prepro_cmd=None, postpro_cmd=None):
+    def __init__(self, queue, prepro_cmd=None, postpro_cmd=None, slang=None, tlang=None):
         print prepro_cmd
         self.queue = queue
         self.prepro_cmd = []
@@ -102,18 +102,38 @@ class Root(object):
         self.postpro_cmd = []
         if postpro_cmd != None:
             self.postpro_cmd = postpro_cmd
+        self.expected_params = {}
+        if slang:
+            self.expected_params['source'] = slang.lower()
+        if tlang:
+            self.expected_params['target'] = tlang.lower()
 
     def _check_params(self, params):
         errors = []
         missing = [p for p in self.required_params if not p in params]
-        for p in missing:
-            errors.append({"domain":"global","reason":"required","message":
-                "Required parameter: %s" %p, "locationType": "parameter",
-                "location": "%s" %p})
-        if errors:
+        if missing:
+            for p in missing:
+                errors.append({"domain":"global",
+                               "reason":"required",
+                               "message":"Required parameter: %s" %p,
+                               "locationType": "parameter",
+                               "location": "%s" %p})
             return {"error": {"errors":errors,
-                              "code": 400,
-                              "message": "Required parameter: %s" %missing[0]}}
+                              "code":400,
+                              "message":"Required parameter: %s" %missing[0]}}
+
+        for key, val in self.expected_params.iteritems():
+            assert key in params, "expected param %s" %key
+            if params[key].lower() != val:
+                message = "expetect value for parameter '%s':'%s'" %(key,val)
+                errors.append({"domain":"global",
+                               "reason":"invalid value: '%s'" %params[key],
+                               "message":message,
+                               "locationType": "parameter",
+                               "location": "%s" %p})
+                return {"error": {"errors":errors,
+                                  "code":400,
+                                  "message":message}}
         return None
 
     def _pipe(self, proc, s):
@@ -123,6 +143,7 @@ class Root(object):
         return proc.stdout.readline().decode("utf-8").rstrip()
 
     def _prepro(self, query):
+        print dir(cherrypy.thread_data)
         if not hasattr(cherrypy.thread_data, 'prepro'):
             cherrypy.thread_data.prepro = map(popen, self.prepro_cmd)
         for proc in cherrypy.thread_data.prepro:
@@ -168,6 +189,9 @@ if __name__ == "__main__":
     parser.add_argument('-options', dest="moses_options", action='store', help='moses options, including .ini -async-output -print-id', default="-f phrase-model/moses.ini -v 0 -threads 2 -async-output -print-id")
     parser.add_argument('-prepro', action='store', nargs="+", help='complete call to preprocessing script including arguments')
     parser.add_argument('-postpro', action='store', nargs="+", help='complete call to postprocessing script including arguments')
+    parser.add_argument('-slang', action='store', help='source language code')
+    parser.add_argument('-tlang', action='store', help='target language code')
+
     args = parser.parse_args(sys.argv[1:])
 
     moses = MosesProc(" ".join((args.moses_path, args.moses_options)))
@@ -177,6 +201,6 @@ if __name__ == "__main__":
                             'server.thread_pool': args.nthreads,
                             'server.socket_host': args.ip})
     cherrypy.config.update({'error_page.default': json_error})
-    cherrypy.quickstart(Root(moses.source_queue, args.prepro, args.postpro))
+    cherrypy.quickstart(Root(moses.source_queue, args.prepro, args.postpro, args.slang, args.tlang))
 
     moses.close()
