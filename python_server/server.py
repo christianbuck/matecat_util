@@ -93,7 +93,7 @@ def json_error(status, message, traceback, version):
 class Root(object):
     required_params = ["q", "key", "target", "source"]
 
-    def __init__(self, queue, prepro_cmd=None, postpro_cmd=None, slang=None, tlang=None):
+    def __init__(self, queue, prepro_cmd=None, postpro_cmd=None, slang=None, tlang=None, pretty=False):
         print prepro_cmd
         self.queue = queue
         self.prepro_cmd = []
@@ -107,6 +107,7 @@ class Root(object):
             self.expected_params['source'] = slang.lower()
         if tlang:
             self.expected_params['target'] = tlang.lower()
+        self.pretty = pretty
 
     def _check_params(self, params):
         errors = []
@@ -157,6 +158,12 @@ class Root(object):
             query = self._pipe(proc, query)
         return query
 
+    def _dump_json(self, data):
+        if self.pretty:
+            return json.dumps(data, indent=2) + "\n"
+        return json.dumps(data) + "\n"
+
+
     @cherrypy.expose
     def translate(self, **kwargs):
         response = cherrypy.response
@@ -165,7 +172,7 @@ class Root(object):
         errors = self._check_params(kwargs)
         if errors:
             cherrypy.response.status = 400
-            return json.dumps(errors, sort_keys=True, indent=4)
+            return self._dump_json(errors)
         print "Request:", kwargs["q"]
         q = self._prepro(kwargs["q"])
         print "Request after preprocessing:", q
@@ -176,8 +183,7 @@ class Root(object):
             translation = result_queue.get()
         translation = self._postpro(translation)
         data = {"data" : {"translations" : [{"translatedText":translation}]}}
-
-        return json.dumps(data)
+        return self._dump_json(data)
 
 if __name__ == "__main__":
     import argparse
@@ -189,6 +195,7 @@ if __name__ == "__main__":
     parser.add_argument('-options', dest="moses_options", action='store', help='moses options, including .ini -async-output -print-id', default="-f phrase-model/moses.ini -v 0 -threads 2 -async-output -print-id")
     parser.add_argument('-prepro', action='store', nargs="+", help='complete call to preprocessing script including arguments')
     parser.add_argument('-postpro', action='store', nargs="+", help='complete call to postprocessing script including arguments')
+    parser.add_argument('-pretty', action='store_true', help='pretty print json')
     parser.add_argument('-slang', action='store', help='source language code')
     parser.add_argument('-tlang', action='store', help='target language code')
 
@@ -201,6 +208,6 @@ if __name__ == "__main__":
                             'server.thread_pool': args.nthreads,
                             'server.socket_host': args.ip})
     cherrypy.config.update({'error_page.default': json_error})
-    cherrypy.quickstart(Root(moses.source_queue, args.prepro, args.postpro, args.slang, args.tlang))
+    cherrypy.quickstart(Root(moses.source_queue, args.prepro, args.postpro, args.slang, args.tlang, args.pretty))
 
     moses.close()
