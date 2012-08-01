@@ -144,7 +144,6 @@ class Root(object):
         return proc.stdout.readline().decode("utf-8").rstrip()
 
     def _prepro(self, query):
-        print dir(cherrypy.thread_data)
         if not hasattr(cherrypy.thread_data, 'prepro'):
             cherrypy.thread_data.prepro = map(popen, self.prepro_cmd)
         for proc in cherrypy.thread_data.prepro:
