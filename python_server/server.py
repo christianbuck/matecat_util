@@ -6,11 +6,32 @@ import subprocess
 import cherrypy
 import json
 import codecs
+import re
 
 def popen(cmd):
     cmd = cmd.split()
     sys.stderr.write("executing: %s\n" %(" ".join(cmd)))
     return subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+
+class Filter(object):
+    def __init__(self, remove_newlines=True, collapse_spaces=True):
+        self.filters = []
+        if remove_newlines:
+            self.filters.append(self.__remove_newlines)
+        if collapse_spaces:
+            self.filters.append(self.__collapse_spaces)
+
+    def filter(self, s):
+        for f in self.filters:
+            s = f(s)
+        return s
+
+    def __remove_newlines(self, s):
+        return s.replace('\n',' ')
+
+    def __collapse_spaces(self, s):
+        return re.sub('\s\s+', ' ', s)
+
 
 class WriteThread(threading.Thread):
     def __init__(self, p_in, source_queue, web_queue):
@@ -95,6 +116,7 @@ class Root(object):
 
     def __init__(self, queue, prepro_cmd=None, postpro_cmd=None, slang=None, tlang=None, pretty=False):
         print prepro_cmd
+        self.filter = Filter(remove_newlines=True, collapse_spaces=True)
         self.queue = queue
         self.prepro_cmd = []
         if prepro_cmd != None:
@@ -173,7 +195,7 @@ class Root(object):
             cherrypy.response.status = 400
             return self._dump_json(errors)
         print "Request:", kwargs["q"]
-        q = self._prepro(kwargs["q"])
+        q = self.filter.filter(self._prepro(kwargs["q"]))
         print "Request after preprocessing:", q
         translation = ""
         if q.strip():
