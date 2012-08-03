@@ -1,19 +1,11 @@
 #!/usr/bin/python
 
-import os
-from time import sleep
-from random import randint
 import sys
 import codecs
 import urllib
 import urllib2
 import json
 from multiprocessing import Pool
-
-def f(x):
-    sleep(randint(0,4))
-    return x*x
-
 
 def get_translation_from_json(d):
     """ extract translation from a parsed json object
