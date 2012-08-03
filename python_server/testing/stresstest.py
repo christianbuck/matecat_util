@@ -46,10 +46,22 @@ def wrap_query(url_template, line):
     return url
 
 
+def read_file(filename, maxlines):
+    data = []
+    if filename:
+        data = codecs.open(filename,'r','utf-8').readlines()
+    data = [s.decode('utf-8') for s in sys.stdin]
+
+    nlines = len(data)
+    if maxlines:
+        nlines = min(maxlines, len(data))
+    return nlines, data
+
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('-source', help='source data, default: read from stdin')
+    parser.add_argument('-target', help='target data for comparision, optional')
     parser.add_argument('-out', help='output file, default: write to stdout')
     parser.add_argument('-server', help='server address, default: localhost', default="127.0.0.1")
     parser.add_argument('-port', help='server port, default: 8080', type=int, default=8080)
@@ -58,14 +70,7 @@ if __name__ == '__main__':
     parser.add_argument('-slang', action='store', help='source language code', required=True)
     parser.add_argument('-tlang', action='store', help='target language code', required=True)
     parser.add_argument('-verbose', action='store_true', help='verbose mode')
-
     args = parser.parse_args(sys.argv[1:])
-
-
-    #pool = Pool(processes=50)
-    #result = pool.apply_async(f, range(100))
-    #print result.get(timeout=1)
-    #print pool.map(f, range(50))
 
     pool = Pool(processes=args.nthreads)
 
@@ -73,30 +78,16 @@ if __name__ == '__main__':
                    "/translate?q=%s&key=0&"+ \
                    "target=%s&source=%s" %(args.tlang, args.slang)
 
-    source_data = []
-    if args.source:
-        source_data = codecs.open(args.source,'r','utf-8').readlines()
-    source_data = [s.decode('utf-8') for s in sys.stdin]
-
-    maxlines = len(source_data)
-    if args.maxlines:
-        maxlines = min(args.maxlines, len(source_data))
-
+    maxlines, source_data = read_file(args.source, args.maxlines)
     queries = (wrap_query(url_template, s) for s in source_data[:maxlines])
+    queries = list(queries)
+    assert len(queries) == maxlines
 
     if args.verbose:
         sys.stderr.write("loaded %s sentences\n" %(len(source_data)))
         sys.stderr.write("processing %s queries  in %s threads...\n"
-                         %(args.nthreads, maxlines))
+                         %(maxlines, args.nthreads))
 
+    # hammertime
     translations = pool.map(query_server, queries)
 
-    sys.exit()
-    for line in sourcefile[:100]:
-        line = urllib.quote(line.encode('utf-8').strip())
-        url = "http://localhost:8080/translate?q=%s&key=0&target=en&source=de" %line
-        response = urllib2.urlopen(url)
-        response_data = json.load(response)
-        #print json.dumps(response_data,indent=2)
-        translation = get_translation_from_json(response_data)
-        print translation
