@@ -57,12 +57,26 @@ def read_file(filename, maxlines):
         nlines = min(maxlines, len(data))
     return nlines, data
 
+def write_output(filename, translations):
+    if filename:
+        if filename == '-':
+            for line in translations:
+                print line.encode('utf-8')
+        else:
+            of = open(filename, 'w')
+            for line in translations:
+                of.write(line.encode('utf-8'))
+                of.write('\n')
+        return True
+    return False
+
+
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('-source', help='source data, default: read from stdin')
-    parser.add_argument('-target', help='target data for comparision, optional')
-    parser.add_argument('-out', help='output file, default: write to stdout')
+    #parser.add_argument('-target', help='target data for comparision, optional')
+    parser.add_argument('-out', help='output file, if '-': write to stdout')
     parser.add_argument('-server', help='server address, default: localhost', default="127.0.0.1")
     parser.add_argument('-port', help='server port, default: 8080', type=int, default=8080)
     parser.add_argument('-nthreads', help='number of threads, default: 10', type=int, default=10)
@@ -90,4 +104,7 @@ if __name__ == '__main__':
 
     # hammertime
     translations = pool.map(query_server, queries)
+
+    if write_output(args.out, translations) and args.verbose:
+        sys.stderr.write("wrote %s translations to %s\n" %(len(translations), args.out))
 
