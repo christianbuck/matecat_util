@@ -2,9 +2,33 @@
 
 import sys
 import StringIO
-from lxml import etree as ET
 from xml.sax.saxutils import escape, unescape
-from xml.sax.saxutils import quoteattr
+
+# import chain from http://lxml.de/tutorial.html
+try:
+  from lxml import etree as ET
+except ImportError:
+  try:
+    # Python 2.5
+    import xml.etree.cElementTree as ET
+    print("running with cElementTree on Python 2.5+")
+  except ImportError:
+    try:
+      # Python 2.5
+      import xml.etree.ElementTree as ET
+      print("running with ElementTree on Python 2.5+")
+    except ImportError:
+      try:
+        # normal cElementTree install
+        import cElementTree as ET
+        print("running with cElementTree")
+      except ImportError:
+        try:
+          # normal ElementTree install
+          import elementtree.ElementTree as ET
+          print("running with ElementTree")
+        except ImportError:
+          print("Failed to import ElementTree from any known place")
 
 def make_attrib(name, val):
     quot = '"'
