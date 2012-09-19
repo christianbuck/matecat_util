@@ -6,6 +6,9 @@ $ cat example
 
 Also<b id="4">nested<i>tags</i></b>work<dot>.</dot>
 Line with no tag .
+Keep escaped markup <b>&lt;</b>
+this is the hmtl symbol &gt; for "higher than"
+this is the character symbol > for "higher than"
 Quotes<tag id='double"quote"' id2="single'quote">should</tag>work.
 <!-- Comment-->
 <a help="empty element"/>3>2 & 4>3.
@@ -16,16 +19,53 @@ $ cat example | /path/to/tokenizer.perl  -x
 
 Also <b id="4"> nested <i> tags </i> </b> work <dot> . </dot> 
 Line with no tag .
+Keep escaped markup <b> &amp; lt ; </b> 
+this is the hmtl symbol &amp; gt ; for &quot; higher than &quot;
+this is the character symbol &gt; for &quot; higher than &quot;
 Quotes <tag id='double"quote"' id2="single'quote"> should </tag> work . 
 <!-- Comment-->
 <a help="empty element"/> 3 &gt; 2 &amp; 4 &gt; 3 . 
 
 ### Annotate words with tags ###
+
 $ cat example | /path/to/tokenizer.perl  -x | ./annotate_words.py 
 
-<passthrough tag="0|#1|&lt;b_1 id=&quot;4&quot;&gt;#2|&lt;b_1 id=&quot;4&quot;&gt;&lt;i_2&gt;#3|#4|&lt;dot_3&gt;"/> Also nested tags work .
-<passthrough tag="0|#1|#2|#3|#4|"/> Line with no tag .
-<passthrough tag="0|#1|&lt;tag_1 id=&apos;double&quot;quote&quot;&apos; id2=&quot;single&apos;quote&quot;&gt;#2|#3|"/> Quotes should work .
-<passthrough tag="0|#0|&lt;&lt;built-in function Comment&gt;_1&gt;"/> Comment
-<passthrough tag="0|#0|&lt;a_1 help=&quot;empty element&quot;&gt;#0|#1|#2|#3|#4|#5|#6|#7|"/> 3 > 2 & 4 > 3 .
+<passthrough tag="1#&lt;b_1 id=&quot;4&quot;&gt;||2#&lt;b_1 id=&quot;4&quot;&gt;&lt;i_2&gt;||4#&lt;dot_3&gt;" src="Also nested tags work ."/>Also nested tags work .
+Line with no tag .
+<passthrough tag="3#&lt;b_1&gt;||4#&lt;b_1&gt;||5#&lt;b_1&gt;" src="Keep escaped markup &amp; lt ;"/>Keep escaped markup &amp; lt ;
+this is the hmtl symbol &amp; gt ; for &quot; higher than &quot;
+this is the character symbol &gt; for &quot; higher than &quot;
+<passthrough tag="1#&lt;tag_1 id=&apos;double&quot;quote&quot;&apos; id2=&quot;single&apos;quote&quot;&gt;" src="Quotes should work ."/>Quotes should work .
+<passthrough tag="0#&lt;&lt;built-in function Comment&gt;_1&gt;" src="Comment"/>Comment
+<passthrough tag="0#&lt;a_1 help=&quot;empty element&quot;&gt;" src="3 &gt; 2 &amp; 4 &gt; 3 ."/>3 &gt; 2 &amp; 4 &gt; 3 .
+
+Or in the more human readable but unparseable version:
+
+$ cat example | /path/to/tokenizer.perl  -x | ./annotate_words.py -noescape
+
+<passthrough tag="1#<b_1 id="4">||2#<b_1 id="4"><i_2>||4#<dot_3>" src="Also nested tags work ."/>Also nested tags work .
+Line with no tag .
+<passthrough tag="3#<b_1>||4#<b_1>||5#<b_1>" src="Keep escaped markup &amp; lt ;"/>Keep escaped markup &amp; lt ;
+this is the hmtl symbol &amp; gt ; for &quot; higher than &quot;
+this is the character symbol &gt; for &quot; higher than &quot;
+<passthrough tag="1#<tag_1 id='double"quote"' id2="single'quote">" src="Quotes should work ."/>Quotes should work .
+<passthrough tag="0#<<built-in function Comment>_1>" src="Comment"/>Comment
+<passthrough tag="0#<a_1 help="empty element">" src="3 &gt; 2 &amp; 4 &gt; 3 ."/>3 &gt; 2 &amp; 4 &gt; 3 .
+
+Then moses which will give us something like this:
+<passthrough tag="1#<b_1 id="4">||2#<b_1 id="4"><i_2>||4#<dot_3>" src="Also nested tags work ."/>Geschachtelte Tags |1-2| gehen |3| auch |0| . |4|
+
+Then word alignment which will hopefully give us:
+<passthrough tag="1#<b_1 id="4">||2#<b_1 id="4"><i_2>||4#<dot_3>" src="Also nested tags work ."/>Geschachtelte |1| Tags |2| gehen |3| auch |0| . |4|
+
+Finally restoration of the tags on a word-level:
+
+<b_1 id="4">Geschachtelte</b_1> <b_1 id="4"><i_2>Tags</i_2></b_1>gehen auch <dot_3>.</dot_3>
+
+Collapsing adjaecent tags of same type:
+<b_1 id="4">Geschachtelte<i_2>Tags</i_2></b_1>gehen auch <dot_3>.</dot_3>
+
+Finally: Removal of tag-identifiers:
+<b id="4">Geschachtelte<i>Tags</i></b>gehen auch <dot>.</dot>
+
 
