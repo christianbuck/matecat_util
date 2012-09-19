@@ -1,0 +1,31 @@
+Pipeline
+
+### Raw Input ###
+
+$ cat example
+
+Also<b id="4">nested<i>tags</i></b>work<dot>.</dot>
+Line with no tag .
+Quotes<tag id='double"quote"' id2="single'quote">should</tag>work.
+<!-- Comment-->
+<a help="empty element"/>3>2 & 4>3.
+
+### Tokenized ###
+
+$ cat example | /path/to/tokenizer.perl  -x 
+
+Also <b id="4"> nested <i> tags </i> </b> work <dot> . </dot> 
+Line with no tag .
+Quotes <tag id='double"quote"' id2="single'quote"> should </tag> work . 
+<!-- Comment-->
+<a help="empty element"/> 3 &gt; 2 &amp; 4 &gt; 3 . 
+
+### Annotate words with tags ###
+$ cat example | /path/to/tokenizer.perl  -x | ./annotate_words.py 
+
+<passthrough tag="0|#1|&lt;b_1 id=&quot;4&quot;&gt;#2|&lt;b_1 id=&quot;4&quot;&gt;&lt;i_2&gt;#3|#4|&lt;dot_3&gt;"/> Also nested tags work .
+<passthrough tag="0|#1|#2|#3|#4|"/> Line with no tag .
+<passthrough tag="0|#1|&lt;tag_1 id=&apos;double&quot;quote&quot;&apos; id2=&quot;single&apos;quote&quot;&gt;#2|#3|"/> Quotes should work .
+<passthrough tag="0|#0|&lt;&lt;built-in function Comment&gt;_1&gt;"/> Comment
+<passthrough tag="0|#0|&lt;a_1 help=&quot;empty element&quot;&gt;#0|#1|#2|#3|#4|#5|#6|#7|"/> 3 > 2 & 4 > 3 .
+
