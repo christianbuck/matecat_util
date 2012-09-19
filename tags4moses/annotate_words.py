@@ -47,6 +47,7 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('-noescape', action='store_true', help='don\'t escape <&> and quotations')
+    parser.add_argument('-nosource', action='store_true', help='don\'t include src attribute')
     args = parser.parse_args(sys.argv[1:])
 
     for line in sys.stdin:
@@ -57,10 +58,11 @@ if __name__ == "__main__":
         annotated_words = []
         for word, tagstack in anno_iter(tree.getroot(),[]):
             #print len(words), word, tagstack
-            annotated_words.append("%s|%s" %(len(words), "".join(tagstack)))
+            if tagstack:
+                annotated_words.append("%s#%s" %(len(words), "".join(tagstack)))
             if word.strip():
                 words.append(word)
-        annotated_words = '#'.join(annotated_words)
+        annotated_words = '||'.join(annotated_words)
         #print annotated_words, " ".join(words)
 
         if not args.noescape:
@@ -68,5 +70,11 @@ if __name__ == "__main__":
             assert annotated_words == unescape(escaped_annotated_words, {"&apos;":"'", "&quot;":'"'})
             annotated_words = escaped_annotated_words
 
-        print "<passthrough tag=\"%s\"/>" %annotated_words, " ".join(words)
-
+        if annotated_words:
+            src = escape(" ".join(words), {"'":"&apos;", '"':"&quot;"})
+            if args.nosource:
+                print "<passthrough tag=\"%s\"/>%s" %(annotated_words, src)
+            else:
+                print "<passthrough tag=\"%s\" src=\"%s\"/>%s" %(annotated_words, src, src)
+        else:
+            print line
