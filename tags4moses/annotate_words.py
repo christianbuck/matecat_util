@@ -1,43 +1,85 @@
 #!/usr/bin/env python
 
 import sys
-from xml.etree.cElementTree import iterparse
-from xml.etree import cElementTree as ET
 import StringIO
-import xml.sax
+#import xml.sax
+from lxml import etree as ET
+#import xml.etree.cElementTree as ET
 
-from lxml import etree
+def make_tag(tag, tag_id, attrib=None):
+    if attrib:
+        attribs = " ".join(["%s=\"%s\"" %(key, val) for key, val in attrib.items()])
+        return "<%s_%s %s>" %(tag, tag_id, attribs)
+    return "<%s_%s>" %(tag, tag_id)
 
 def annotate_line(line):
     tagstack = []
-    text = []
-    parser = iterparse(line, events=("start", "end"))
+    annotated_text = []
+    tag_id = 0
+    parser = ET.iterparse(line, events=("start", "end"))
     for event, elem in parser:
         if event == "start":
-            tagstack.append(elem.tag)
+            tagstack.append( (elem.tag, tag_id, elem.attrib) )
+            tag_id += 1
             print 'start_xml:', ET.tostring(elem)
             print 'start', elem
             if elem.text:
                 for token in elem.text.split():
-                    text.append((token, list(tag for tag in tagstack[1:])))
+                    annotated_text.append((token, list(make_tag(*tag) for tag in tagstack[1:])))
                 print 'text:', elem.text
                 print 'tail:', elem.tail
         else:
             print 'end', elem
             print 'end_xml:', ET.tostring(elem)
+            assert tagstack[-1][0] == elem.tag
+            tagstack.pop()
             if elem.tail:
                 for token in elem.tail.split():
-                    text.append((token, list(tag for tag in tagstack[1:])))
+                    annotated_text.append((token, list(make_tag(*tag) for tag in tagstack[1:])))
             if elem.text:
                 print 'text:', elem.text
-            assert tagstack[-1] == elem.tag
-            tagstack.pop()
+            else:
+                print
+
+
         print 'stack', tagstack
-    print text
+    print annotated_text
     return parser.root[0]
 
 def wrap_segment(line):
     return "<seg>%s</seg>" %line
+
+def anno(tree, stack):
+    stack.append( (tree.tag, tree.attrib) )
+    if tree.text and tree.text.strip():
+        print tree.text, stack
+    for child in tree:
+        anno(child, stack)
+    stack.pop()
+    if tree.tail and tree.tail.strip():
+        print tree.tail, stack
+
+def anno_iter(tree, stack=None, tagid=None):
+    if stack == None:
+        stack = []
+    if tagid == None:
+        tagid = [0] # we need a mutable type here
+    stack.append( make_tag(tree.tag, tagid[0], tree.attrib) )
+    tagid[0] += 1
+    #if type(tree) == ET._Comment:
+    #    yield str(tree)
+    if tree.text and tree.text.strip():
+        for word in tree.text.split():
+            yield word, stack[1:]
+    else:
+        yield '', stack[1:]
+    for child in tree:
+        for res in anno_iter(child, stack, tagid):
+            yield res
+    stack.pop()
+    if tree.tail and tree.tail.strip():
+        for word in tree.tail.split():
+            yield word, stack[1:]
 
 if __name__ == "__main__":
     #import argparse
@@ -49,7 +91,25 @@ if __name__ == "__main__":
     #args = parser.parse_args(sys.argv[1:])
 
     for line in sys.stdin:
-        annotate_line(StringIO.StringIO(wrap_segment(line)))
+        line = line.strip()
+        print 'parsing:', line
+        # annotate_line(StringIO.StringIO(wrap_segment(line)))
+        tree = ET.parse(StringIO.StringIO(wrap_segment(line)))
+        words = []
+        annotated_words = []
+        for word, tagstack in anno_iter(tree.getroot(),[]):
+            #print len(words), word, tagstack
+            annotated_words.append("%s|||%s|||%s" %(len(words), word, "".join(tagstack)))
+            if word.strip():
+                words.append(word)
+        print '###'.join(annotated_words), "".join(words)
+        #anno(tree.getroot(), [])
+
+        #
+        #for node in tree.getroot():
+            #print "%s\t%s\t%s\t%s" %(node.tag, node.attrib, node.text, node.tail)
+
+
     #for event, elem in iterparse(sys.stdin, events=("start", "end")):
     #    if event == "start":
     #        print 'start', elem
