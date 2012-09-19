@@ -1,4 +1,4 @@
 Das <tag id='bla bla.'/>so soo sooo<b id="4">sehr<i>kleine</i></b>Haus<dot>.</dot>
 Line with no tag.
 <!-- Comment -->
-<a help='this works.'/>3>2 in this<a>very</a><b><i>small</b>example</i>.
+<a help='this works.'/>3>2 in this<a>very</a><b><i>small example</i></b>.
