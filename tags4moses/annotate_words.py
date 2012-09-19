@@ -10,52 +10,8 @@ def make_tag(tag, tag_id, attrib=None):
         return "<%s_%s %s>" %(tag, tag_id, attribs)
     return "<%s_%s>" %(tag, tag_id)
 
-def annotate_line(line):
-    tagstack = []
-    annotated_text = []
-    tag_id = 0
-    parser = ET.iterparse(line, events=("start", "end"))
-    for event, elem in parser:
-        if event == "start":
-            tagstack.append( (elem.tag, tag_id, elem.attrib) )
-            tag_id += 1
-            print 'start_xml:', ET.tostring(elem)
-            print 'start', elem
-            if elem.text:
-                for token in elem.text.split():
-                    annotated_text.append((token, list(make_tag(*tag) for tag in tagstack[1:])))
-                print 'text:', elem.text
-                print 'tail:', elem.tail
-        else:
-            print 'end', elem
-            print 'end_xml:', ET.tostring(elem)
-            assert tagstack[-1][0] == elem.tag
-            tagstack.pop()
-            if elem.tail:
-                for token in elem.tail.split():
-                    annotated_text.append((token, list(make_tag(*tag) for tag in tagstack[1:])))
-            if elem.text:
-                print 'text:', elem.text
-            else:
-                print
-
-
-        print 'stack', tagstack
-    print annotated_text
-    return parser.root[0]
-
 def wrap_segment(line):
     return "<seg>%s</seg>" %line
-
-def anno(tree, stack):
-    stack.append( (tree.tag, tree.attrib) )
-    if tree.text and tree.text.strip():
-        print tree.text, stack
-    for child in tree:
-        anno(child, stack)
-    stack.pop()
-    if tree.tail and tree.tail.strip():
-        print tree.tail, stack
 
 def anno_iter(tree, stack=None, tagid=None):
     if stack == None:
