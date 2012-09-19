@@ -3,10 +3,18 @@
 import sys
 import StringIO
 from lxml import etree as ET
+from xml.sax.saxutils import escape, unescape
+from xml.sax.saxutils import quoteattr
+
+def make_attrib(name, val):
+    quot = '"'
+    if '"' in val:
+        quot = "'"
+    return "%s=%s%s%s" %(name, quot, val, quot)
 
 def make_tag(tag, tag_id, attrib=None):
     if attrib:
-        attribs = " ".join(["%s=\"%s\"" %(key, val) for key, val in attrib.items()])
+        attribs = " ".join([make_attrib(key, val) for key, val in attrib.items()])
         return "<%s_%s %s>" %(tag, tag_id, attribs)
     return "<%s_%s>" %(tag, tag_id)
 
