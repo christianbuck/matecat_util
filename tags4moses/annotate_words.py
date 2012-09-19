@@ -2,9 +2,7 @@
 
 import sys
 import StringIO
-#import xml.sax
 from lxml import etree as ET
-#import xml.etree.cElementTree as ET
 
 def make_tag(tag, tag_id, attrib=None):
     if attrib:
@@ -82,41 +80,16 @@ def anno_iter(tree, stack=None, tagid=None):
             yield word, stack[1:]
 
 if __name__ == "__main__":
-    #import argparse
-    #parser = argparse.ArgumentParser()
-    #parser.add_argument('infile', action='store', help="input file")
-    #parser.add_argument('n', action='store', type=int, help="number argument")
-    #parser.add_argument('-b', action='store_true', dest='binary',
-    #                    help='binary option', default=False)
-    #args = parser.parse_args(sys.argv[1:])
 
     for line in sys.stdin:
         line = line.strip()
         print 'parsing:', line
-        # annotate_line(StringIO.StringIO(wrap_segment(line)))
         tree = ET.parse(StringIO.StringIO(wrap_segment(line)))
         words = []
         annotated_words = []
         for word, tagstack in anno_iter(tree.getroot(),[]):
             #print len(words), word, tagstack
-            annotated_words.append("%s|||%s|||%s" %(len(words), word, "".join(tagstack)))
+            annotated_words.append("%s|%s|%s" %(len(words), word, "".join(tagstack)))
             if word.strip():
                 words.append(word)
-        print '###'.join(annotated_words), "".join(words)
-        #anno(tree.getroot(), [])
-
-        #
-        #for node in tree.getroot():
-            #print "%s\t%s\t%s\t%s" %(node.tag, node.attrib, node.text, node.tail)
-
-
-    #for event, elem in iterparse(sys.stdin, events=("start", "end")):
-    #    if event == "start":
-    #        print 'start', elem
-    #        tagstack.append(elem.tag)
-    #    else:
-    #        print 'end', elem
-    #        print 'text:', elem.text
-    #        assert tagstack[-1] == elem.tag
-    #        tagstack.pop()
-    #    print 'stack', tagstack
+        print '#'.join(annotated_words), " ".join(words)
