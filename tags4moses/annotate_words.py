@@ -63,7 +63,7 @@ if __name__ == "__main__":
         annotated_words = '#'.join(annotated_words)
         #print annotated_words, " ".join(words)
 
-        if args.escape:
+        if not args.noescape:
             escaped_annotated_words = escape(annotated_words, {"'":"&apos;", '"':"&quot;"})
             assert annotated_words == unescape(escaped_annotated_words, {"&apos;":"'", "&quot;":'"'})
             annotated_words = escaped_annotated_words
