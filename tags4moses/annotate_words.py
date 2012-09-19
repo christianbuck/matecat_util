@@ -44,16 +44,29 @@ def anno_iter(tree, stack=None, tagid=None):
             yield word, stack[1:]
 
 if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-noescape', action='store_true', help='don\'t escape <&> and quotations')
+    args = parser.parse_args(sys.argv[1:])
 
     for line in sys.stdin:
         line = line.strip()
-        print 'parsing:', line
+        #print 'parsing:', line
         tree = ET.parse(StringIO.StringIO(wrap_segment(line)))
         words = []
         annotated_words = []
         for word, tagstack in anno_iter(tree.getroot(),[]):
             #print len(words), word, tagstack
-            annotated_words.append("%s|%s|%s" %(len(words), word, "".join(tagstack)))
+            annotated_words.append("%s|%s" %(len(words), "".join(tagstack)))
             if word.strip():
                 words.append(word)
-        print '#'.join(annotated_words), " ".join(words)
+        annotated_words = '#'.join(annotated_words)
+        #print annotated_words, " ".join(words)
+
+        if args.escape:
+            escaped_annotated_words = escape(annotated_words, {"'":"&apos;", '"':"&quot;"})
+            assert annotated_words == unescape(escaped_annotated_words, {"&apos;":"'", "&quot;":'"'})
+            annotated_words = escaped_annotated_words
+
+        print "<passthrough tag=\"%s\"/>" %annotated_words, " ".join(words)
+
