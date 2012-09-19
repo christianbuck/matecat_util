@@ -1,4 +1,8 @@
-Das <tag id='bla:"bla."' id2="walter's"/>so soo sooo<b id="4'4">sehr<i>kleine</i></b>Haus<dot>.</dot>
+Also<b id="4">nested<i>tags</i></b>work<dot>.</dot>
 Line with no tag .
-<!-- Comment -->
-<a help="Hein's Ketchup"/>3>2 in this<a>very</a><b><i>small example</i></b>.
+Keep escaped markup <b>&lt;</b>
+this is the hmtl symbol &gt; for "higher than"
+this is the character symbol > for "higher than"
+Quotes<tag id='double"quote"' id2="single'quote">should</tag>work.
+<!-- Comment-->
+<a help="empty element"/>3>2 & 4>3.
