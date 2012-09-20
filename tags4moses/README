@@ -68,4 +68,6 @@ Collapsing adjaecent tags of same type:
 Finally: Removal of tag-identifiers:
 <b id="4">Geschachtelte<i>Tags</i></b>gehen auch <dot>.</dot>
 
+Todo:
 
+Gracefully fail if markup is not parseable
