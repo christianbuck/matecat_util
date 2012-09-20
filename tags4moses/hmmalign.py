@@ -69,6 +69,7 @@ class HMMAligner(object):
     def viterbi(self, src, tgt, pnull=0.4):
         tgt_len = len(tgt)
         Q = [[None]*tgt_len*2 for s in src]
+        jump_probs = self.transition_probs[tgt_len]
         for j in range(len(src)):
             w_s = src[j]
             for i in range(2*tgt_len):  # a_j
@@ -90,7 +91,7 @@ class HMMAligner(object):
                                 jump = i-k
                             else:
                                 jump = i-k+tgt_len
-                            jump_prob = self.transition_probs[tgt_len].get(-jump, 0.)
+                            jump_prob = jump_probs.get(-jump, 0.)
                         else: # align to nullword
                             if k==i or k == i-tgt_len:
                                 jump_prob = pnull
