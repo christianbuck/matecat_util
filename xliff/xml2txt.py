@@ -12,6 +12,8 @@ def peel(s):
     m = re_tag.match(s.strip())
     if m:
         return m.groupdict()['inner'].strip()
+    else:
+        return s
 
 def get_text(tree):
     if (tree.text and tree.text.strip()) or (tree.tail and tree.tail.strip()):
