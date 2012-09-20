@@ -4,7 +4,8 @@ import sys
 import gzip
 from collections import defaultdict
 from itertools import imap
-import re
+
+from moparser import MosesOutputParser
 
 class Vocabulary(object):
     def __init__(self, f):
@@ -60,7 +61,7 @@ class HMMAligner(object):
             for jump, s in probs.iteritems():
                 probs[jump] /= s_sum
 
-    def align(self, src, tgt, pnull=.4):
+    def align(self, src, tgt, pnull=.4): # todo: exchange source and target
         Q = self.viterbi( src, tgt, pnull)
         a = self.viterbi_alignment(Q)
         a.reverse()
@@ -128,6 +129,11 @@ class HMMAligner(object):
             j -= 1
         return alignment
 
+def smart_open(filename):
+    if filename.endswith('.gz'):
+        return gzip.open(filename)
+    return open(filename)
+
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
@@ -139,13 +145,25 @@ if __name__ == "__main__":
     #parser.add_argument('-verbose', action='store_true', help='more output', default=False)
     args = parser.parse_args(sys.argv[1:])
 
-    hmm = HMMAligner(gzip.open(args.hmmfile), gzip.open(args.lexprobs))
-    src_voc = Vocabulary(open(args.sourcevoc))
-    tgt_voc = Vocabulary(open(args.targetvoc))
+    hmm = HMMAligner(smart_open(args.hmmfile), smart_open(args.lexprobs))
+    src_voc = Vocabulary(smart_open(args.sourcevoc))
+    tgt_voc = Vocabulary(smart_open(args.targetvoc))
 
-    #sum_transtable(lex_probs)
+    parser = MosesOutputParser()
+    for line in sys.stdin:
+        line = line.strip()
+        src, tgt, align, tag = parser.parse(line)
+
+        src = src_voc.map_sentence(src)
+        tgt = tgt_voc.map_sentence(tgt)
+
+        # compute a target-to-source alignment:
+        # each target word is aligned to none or one source words
+        alignment = hmm.align(tgt, src)
+        print alignment
 
 
+    sys.exit()
 
     tgt = "4908 2053 4443 72".split()     # Musharafs letzter Akt ?
     src = "1580 12 5651 3533 75".split()  # Musharf 's last Act ?
@@ -156,11 +174,7 @@ if __name__ == "__main__":
     src = "desperate to hold onto power , Pervez Musharraf has discarded Pakistan &apos;s constitutional framework and declared a state of emergency ."
     tgt = "in dem verzweifelten Versuch , an der Macht festzuhalten , hat Pervez Musharraf den Rahmen der pakistanischen Verfassung verlassen und den Notstand ausgerufen ."
 
-    src = src_voc.map_sentence(src)
-    tgt = tgt_voc.map_sentence(tgt)
 
     print src
     print tgt
 
-    alignment = hmm.align(src, tgt)
-    print alignment
