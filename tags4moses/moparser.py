@@ -51,7 +51,7 @@ class MosesOutputParser(object):
                 tgt_start = len(words)
             else:
                 words.append(w)
-        return words, align
+        return ' '.join(words), align
 
 if __name__ == "__main__":
     line = '<passthrough tag="1#&lt;b_1 id=&quot;4&quot;&gt;||2#&lt;b_1 id=&quot;4&quot;&gt;&lt;i_2&gt;||4#&lt;dot_3&gt;" src="Also nested tags work ."/>Geschachtelte Tags |1-2| gehen |3-3| auch |0-0| prima |-1| . |4-4|'
