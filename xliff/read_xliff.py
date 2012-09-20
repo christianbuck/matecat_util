@@ -18,8 +18,8 @@ def peel(s):
 def remove_ns(s):
     # in: <ns0:x id="7534" /><ns0:g id="7535">
     # out: <x id="7534" /><g id="7535">
-    re_ns = re.compile(r'<[^ >]*[:](\w+[ />])')
-    return re_ns.sub("<\g<1>",s)
+    re_ns = re.compile(r'<(/?)[^ >]*[:](\w+[ />])')
+    return re_ns.sub("<\g<1>\g<2>",s)
 
 
 if __name__ == '__main__':
