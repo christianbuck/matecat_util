@@ -1,8 +1,5 @@
 #!/usr/bin/env python
 
-import sys
-from collections import defaultdict
-from itertools import imap, izip
 import re
 
 class MosesOutputParser(object):
