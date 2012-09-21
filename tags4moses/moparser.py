@@ -7,15 +7,15 @@ class MosesOutputParser(object):
         pass
 
     def parse(self, line):
-        src, tag, tgt = self.parse_moses_output(line)
+        src, tag, tgt,xml = self.parse_moses_output(line)
         words, align = self.parse_alignment(tgt)
-        return src, words, align, tag
+        return src, words, align, tag, xml
 
     def parse_moses_output(self, line):
         # <passthrough tag="1#<b_1 id="4">||2#<b_1 id="4"><i_2>||4#<dot_3>" src="Also nested tags work ."/>Geschachtelte Tags |1-2| gehen |3| auch |0| . |4|
         re_src = re.compile(r'^<passthrough [^>]*src="(?P<src>[^"]*)"')
         re_tag = re.compile(r'^<passthrough [^>]*tag="(?P<tag>[^"]*)"')
-        re_tgt = re.compile(r'^<passthrough [^>]*>(?P<tgt>.*)$')
+        re_tgt = re.compile(r'^(?P<xml><passthrough [^>]*>)(?P<tgt>.*)$')
 
         src_match = re_src.match(line)
         assert src_match
@@ -28,8 +28,9 @@ class MosesOutputParser(object):
         tgt_match = re_tgt.match(line)
         assert tgt_match
         tgt = tgt_match.groupdict()['tgt']
+        xml = tgt_match.groupdict()['xml']
 
-        return src, tag, tgt
+        return src, tag, tgt, xml
 
     def parse_alignment(self, tgt):
         # Geschachtelte Tags |1-2| gehen |3| auch |0| . |4|

@@ -195,13 +195,13 @@ if __name__ == "__main__":
         if not line:
             print line
             continue
-        src, tgt, align, tag = parser.parse(line)
+        src_txt, tgt_txt, align, tag, markup = parser.parse(line)
 
         if args.verbose:
-            sys.stderr.write("src: %s\ntgt: %s\nalign: %s\n" (src, tgt, str(align)))
+            sys.stderr.write("src: %s\ntgt: %s\nalign: %s\n" (src_txt, tgt_txt, str(align)))
 
-        src = src_voc.map_sentence(src)
-        tgt = tgt_voc.map_sentence(tgt)
+        src = src_voc.map_sentence(src_txt)
+        tgt = tgt_voc.map_sentence(tgt_txt)
 
         if args.verbose:
             sys.stderr.write("src: %s\ntgt: %s\n" (str(src), str(tgt)))
@@ -209,10 +209,21 @@ if __name__ == "__main__":
         # compute a target-to-source alignment:
         # each target word is aligned to none or one source words
         alignment = hmm.align(src, tgt, phrase_alignment=align)
-        print alignment
+        alignment = dict(alignment)
 
+        if args.verbose:
+            sys.stderr.write("alignment: %s\n" (str(alignment)))
+
+        sys.stdout.write(markup)
+        for j, w in enumerate(tgt_txt.rstrip().split()):
+            if j>0:
+                sys.stdout.write(" ")
+            sys.stdout.write("%s |%s|" %(w, alignment[j]))
+        sys.stdout.write("\n")
 
     sys.exit()
+
+
 
     tgt = "4908 2053 4443 72".split()     # Musharafs letzter Akt ?
     src = "1580 12 5651 3533 75".split()  # Musharf 's last Act ?
