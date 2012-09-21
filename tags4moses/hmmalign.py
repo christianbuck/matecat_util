@@ -97,16 +97,24 @@ class HMMAligner(object):
                             if k==i or k == i-tgt_len:
                                 jump_prob = pnull
                         prev_prob = Q[j-1][k][0]
-                        prob = jump_prob * prev_prob / q_max
+                        if q_max > 0:
+                            prev_prob /= q_max
+                        prob = jump_prob * prev_prob
                         if best == None or best[1] < prob:
                             best = (k, prob)
                     Q[j][i] = (best[1]*lex_prob, best[0])
+        #self.printQ(Q, transpose=True)
         return Q
 
-    def printQ(self, Q):
-        for i in range(len(Q[0])):
+    def printQ(self, Q, transpose=False):
+        if transpose:
             for j in range(len(Q)):
-                print "Q(%s,%s)=%s" %(j,i,str(Q[j][i]))
+                for i in range(len(Q[0])):
+                    print "Q(%s,%s)=%s" %(j,i,str(Q[j][i]))
+        else:
+            for i in range(len(Q[0])):
+                for j in range(len(Q)):
+                    print "Q(%s,%s)=%s" %(j,i,str(Q[j][i]))
 
     def viterbi_alignment(self, Q, verbose=False): # backtrace
         j = len(Q)-1
@@ -154,12 +162,19 @@ if __name__ == "__main__":
         line = line.strip()
         src, tgt, align, tag = parser.parse(line)
 
+        print src
+        print tgt
+
         src = src_voc.map_sentence(src)
         tgt = tgt_voc.map_sentence(tgt)
+
+        print src
+        print tgt
 
         # compute a target-to-source alignment:
         # each target word is aligned to none or one source words
         alignment = hmm.align(tgt, src)
+        #alignment = hmm.align(src, tgt)
         print alignment
 
 
@@ -177,4 +192,3 @@ if __name__ == "__main__":
 
     print src
     print tgt
-
