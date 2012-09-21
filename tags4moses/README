@@ -15,7 +15,7 @@ Quotes<tag id='double"quote"' id2="single'quote">should</tag>work.
 
 ### Tokenized ###
 
-$ cat example | /path/to/tokenizer.perl  -x 
+$ cat example | /path/to/tokenizer.perl -X
 
 Also <b id="4"> nested <i> tags </i> </b> work <dot> . </dot> 
 Line with no tag .
@@ -71,3 +71,4 @@ Finally: Removal of tag-identifiers:
 Todo:
 
 Gracefully fail if markup is not parseable
+Deal with comments
