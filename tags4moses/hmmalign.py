@@ -25,10 +25,11 @@ class Vocabulary(object):
         return [self.voc.get(w,0) for w in snt]
 
 class LexTrans(object):
-    def __init__(self, f):
+    def __init__(self, f, min_p=0.0):
         self.lex_probs = defaultdict(dict)
         for src, tgt, cnt, p in imap(str.split, f):
-            self.lex_probs[int(src)][int(tgt)] = float(p)   # p(tgt|src)
+            if float(p) > min_p:
+                self.lex_probs[int(src)][int(tgt)] = float(p)   # p(tgt|src)
 
     def sum_transtable(self):
         for src in self.lex_probs:
@@ -61,28 +62,40 @@ class HMMAligner(object):
             for jump, s in probs.iteritems():
                 probs[jump] /= s_sum
 
-    def align(self, src, tgt, pnull=.4): # todo: exchange source and target
-        Q = self.viterbi( src, tgt, pnull)
+    def align(self, src, tgt, pnull=.4, phrase_alignment=None):
+        Q = self.viterbi( src, tgt, pnull, phrase_alignment)
         a = self.viterbi_alignment(Q)
         a.reverse()
         return a
 
-    def init_q(self, src_len, tgt_len, alignment):
-        Q = [[None]*tgt_len*2 for s in range(src_len)]
+    def init_q(self, J, I, alignment):
+        Q = [[None]*I*2 for s in range(J)]
         for src_idx, tgt_idx in alignment:
             assert len(tgt_idx)>0
-            if len(src_idx) == 0: # unaligned
-                pass
+            for j in tgt_idx:
+                if len(src_idx) == 0: # unaligned
+                    for i in range(I):
+                        Q[j][i] = (0.,-1)
+                else:
+                    for i in range(I):
+                        Q[j][i] = (0.,-1) # mark all words impossible
+                    for i in src_idx:
+                        Q[j][i] = None      # mark aligned words possible
+        return Q
 
 
-    def viterbi(self, src, tgt, pnull=0.4):
+    def viterbi(self, src, tgt, pnull, phrase_alignment):
         I = len(src)
         J = len(tgt)
         Q = [[None]*I*2 for s in tgt]
+        if phrase_alignment:
+            Q = self.init_q(J, I, phrase_alignment)
         jump_probs = self.transition_probs[I]
         for j in range(J):
             w_t = tgt[j]
             for i in range(2*I):  # a_j
+                if not Q[j][i] == None:
+                    continue
                 w_s = 0
                 if i < I:
                     w_s = src[i]
@@ -93,7 +106,14 @@ class HMMAligner(object):
                     Q[j][i] = (jump_prob * lex_prob, -1)
                 else:
                     best = None
-                    q_max = max(p for p,back in Q[j-1])
+                    q_max = 1.0
+                    try:
+                        q_max = max(q[0] for q in Q[j-1] if not q==None)
+                        #q_max = q_max[0]
+                    except ValueError:
+                        pass
+                    #print Q[j-1]
+                    #print 'q_max:', q_max
                     for k in range(2*I): # a_{j-1}
                         jump_prob = 0.0
                         if i < I:
@@ -106,8 +126,11 @@ class HMMAligner(object):
                             if k==i or k == i-I:
                                 jump_prob = pnull
                         prev_prob = Q[j-1][k][0]
+                        #print "prev_prob:", prev_prob
                         if q_max > 0:
                             prev_prob /= q_max
+                        #print "jump_prob:", jump_prob
+                        #print "prev_prob:", prev_prob
                         prob = jump_prob * prev_prob
                         if best == None or best[1] < prob:
                             best = (k, prob)
@@ -159,7 +182,7 @@ if __name__ == "__main__":
     parser.add_argument('sourcevoc', action='store', help="source vocabulary")
     parser.add_argument('targetvoc', action='store', help="target vocabulary")
     parser.add_argument('-pnull', action='store', type=float, help="jump probability to/from NULL word (default: 0.4)", default=0.4)
-    #parser.add_argument('-verbose', action='store_true', help='more output', default=False)
+    parser.add_argument('-verbose', action='store_true', help='more output', default=False)
     args = parser.parse_args(sys.argv[1:])
 
     hmm = HMMAligner(smart_open(args.hmmfile), smart_open(args.lexprobs))
@@ -169,21 +192,23 @@ if __name__ == "__main__":
     parser = MosesOutputParser()
     for line in sys.stdin:
         line = line.strip()
+        if not line:
+            print line
+            continue
         src, tgt, align, tag = parser.parse(line)
 
-        print src
-        print tgt
+        if args.verbose:
+            sys.stderr.write("src: %s\ntgt: %s\nalign: %s\n" (src, tgt, str(align)))
 
         src = src_voc.map_sentence(src)
         tgt = tgt_voc.map_sentence(tgt)
 
-        print src
-        print tgt
+        if args.verbose:
+            sys.stderr.write("src: %s\ntgt: %s\n" (str(src), str(tgt)))
 
         # compute a target-to-source alignment:
         # each target word is aligned to none or one source words
-        #alignment = hmm.align(tgt, src)
-        alignment = hmm.align(src, tgt)
+        alignment = hmm.align(src, tgt, phrase_alignment=align)
         print alignment
 
 
