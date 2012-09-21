@@ -94,11 +94,19 @@ if __name__ == "__main__":
             assert annotated_words == unescape(escaped_annotated_words, {"&apos;":"'", "&quot;":'"'})
             annotated_words = escaped_annotated_words
 
-        if annotated_words:
-            src = escape(" ".join(words), {"'":"&apos;", '"':"&quot;"})
-            if args.nosource:
-                print "<passthrough tag=\"%s\"/>%s" %(annotated_words, src)
-            else:
-                print "<passthrough tag=\"%s\" src=\"%s\"/>%s" %(annotated_words, src, src)
+        src = escape(" ".join(words), {"'":"&apos;", '"':"&quot;"})
+        src = src.encode('utf-8')
+        if args.nosource:
+            print "<passthrough tag=\"%s\"/>%s" %(annotated_words, src)
         else:
-            print line
+            print "<passthrough tag=\"%s\" src=\"%s\"/>%s" %(annotated_words, src, src)
+
+        #if annotated_words:
+        #    src = escape(" ".join(words), {"'":"&apos;", '"':"&quot;"})
+        #    src = src.encode('utf-8')
+        #    if args.nosource:
+        #        print "<passthrough tag=\"%s\"/>%s" %(annotated_words, src)
+        #    else:
+        #        print "<passthrough tag=\"%s\" src=\"%s\"/>%s" %(annotated_words, src, src)
+        #else:
+        #    print line
