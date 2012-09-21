@@ -128,11 +128,6 @@ class HMMAligner(object):
             j -= 1
         return alignment
 
-#def parse_moses_output(line):
-#    # <passthrough tag="1#<b_1 id="4">||2#<b_1 id="4"><i_2>||4#<dot_3>" src="Also nested tags work ."/>Geschachtelte Tags |1-2| gehen |3| auch |0| . |4|
-#    re_src = re.compile(r'^<passthrough [^>]')
-#    line = line.rstrip()
-
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
@@ -149,6 +144,8 @@ if __name__ == "__main__":
     tgt_voc = Vocabulary(open(args.targetvoc))
 
     #sum_transtable(lex_probs)
+
+
 
     tgt = "4908 2053 4443 72".split()     # Musharafs letzter Akt ?
     src = "1580 12 5651 3533 75".split()  # Musharf 's last Act ?

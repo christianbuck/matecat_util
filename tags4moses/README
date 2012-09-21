@@ -53,10 +53,10 @@ this is the character symbol &gt; for &quot; higher than &quot;
 <passthrough tag="0#<a_1 help="empty element">" src="3 &gt; 2 &amp; 4 &gt; 3 ."/>3 &gt; 2 &amp; 4 &gt; 3 .
 
 Then moses which will give us something like this:
-<passthrough tag="1#<b_1 id="4">||2#<b_1 id="4"><i_2>||4#<dot_3>" src="Also nested tags work ."/>Geschachtelte Tags |1-2| gehen |3| auch |0| . |4|
+<passthrough tag="1#<b_1 id="4">||2#<b_1 id="4"><i_2>||4#<dot_3>" src="Also nested tags work ."/>Geschachtelte Tags |1-2| gehen |3-3| auch |0-0| prima |-1 | . |4-4|
 
 Then word alignment which will hopefully give us:
-<passthrough tag="1#<b_1 id="4">||2#<b_1 id="4"><i_2>||4#<dot_3>" src="Also nested tags work ."/>Geschachtelte |1| Tags |2| gehen |3| auch |0| . |4|
+<passthrough tag="1#<b_1 id="4">||2#<b_1 id="4"><i_2>||4#<dot_3>" src="Also nested tags work ."/>Geschachtelte |1| Tags |2| gehen |3| auch |0| prima || . |4|
 
 Finally restoration of the tags on a word-level:
 
