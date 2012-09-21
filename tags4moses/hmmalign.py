@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 import sys
-import gzip
+import gzip, io
 from collections import defaultdict
 from itertools import imap
 
@@ -148,7 +148,7 @@ class HMMAligner(object):
 
 def smart_open(filename):
     if filename.endswith('.gz'):
-        return gzip.open(filename)
+        return io.BufferedReader(gzip.open(filename))
     return open(filename)
 
 if __name__ == "__main__":
