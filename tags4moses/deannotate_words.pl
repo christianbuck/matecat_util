@@ -4,7 +4,7 @@
 use Getopt::Long;
 
 # parameter variables
-my $help = undef; 
+my $help = undef;
 #my $enc = $MATECAT_ENC;
 my $enc = UTF8;
 my $collapse = 0;
@@ -40,17 +40,17 @@ if (scalar(@ARGV) < $required_params || scalar(@ARGV) > ($required_params+$optio
 
 while (my $line=<STDIN>){
 	chomp($line);
-	print STDERR "line:|$line|\n";
+#	print STDERR "line:|$line|\n";
 	my ($passthrough,$trans) = ($line =~ /(^<passthrough[^>]*\/>)(.*)$/);
-	
+
 #	print STDERR "passthough:|$passthrough|\n";
 #	print STDERR "trans:|$trans|\n";
-	
+
 #parsing translation
 	my @trgwords = split (/[ \t]+/, $trans);
 	# eve entries contain words, eodd entries contain word-alignemnt
 	for (my $i=0; $i < scalar(@trgwords); $i+=2){
-		$trgwords[$i+1] =~ s/\|//g; #remove pipeline from word alignemnt 
+		$trgwords[$i+1] =~ s/\|//g; #remove pipeline from word alignemnt
 #		print STDERR "i:$i word:$trgwords[$i] al:",$trgwords[$i+1],"\n";
 	}
 #parsing passthrough
@@ -67,7 +67,7 @@ while (my $line=<STDIN>){
 		while ($value =~ s/\&lt;(.+?)&gt;//){
 			$values[$j] = $1;
 			$values[$j] =~ /^([^ \t]*)([ \t].+)?$/;
-			$mainvalues[$j] = $1; 
+			$mainvalues[$j] = $1;
 #			print STDERR "idx:$idx val:|$value| value:|$value| j:$j values[$j]:|$values[$j]| mainvalues[$j]:|$mainvalues[$j]|\n";
 			$j++;
 		}
@@ -100,31 +100,48 @@ while (my $line=<STDIN>){
 		my $newout = "";
 		while ($contflag){
 			$contflag=0;
-			while ($out =~ s/(.*?)<\/([^ \t]+?)>[ \t]*<(([^ \t]+?)([ \t]|>)[^^>]*)>//){
-				$newout .= $1;
-				my $endtag = $2;
-				my $starttag = $4;
+#                      print STDERR "out:|$out|\n";
+
+			while ($out =~ s/(.*?)(<\/[ ]*([^ >]+?)[ ]*>[ \t]*<(([^ \t>]+)([ \t][^>]*>|>)))//){
+
+				$newout .= " $1 ";
+				my $endtag = $3;
+				my $starttag = $5;
+ #                               print STDERR "endtag:|$endtag| starttag:|$starttag|\n";
 				if ($endtag eq $starttag){
 					$contflag=1;
 				}
 				else
 				{
-					$newout .= $&;
+					$newout .= " $2 ";
 				}
+#                        print STDERR "newout:|$newout|\n";
+#                        print STDERR "out:|$out|\n";
 			}
 		}
-		$newout .= $out;
+		$newout .= " $out ";
 		$out = $newout;
 	}
 
 # escaping (or not) some characters
 	if ($escape){
-		$out =~ s/\&amp;/\&/g;
-		$out =~ s/\&quot;/\"/g;
-	}
-	else{
 		$out =~ s/</&lt;/g;
 		$out =~ s/>/&gt;/g;
 	}
+	else{
+		$out =~ s/\&amp;/\&/g;
+		$out =~ s/\&quot;/\"/g;
+	}
+
+# removing index of tags
+        $out =~ s/(<\/?)([^> ]+)_\d+/$1$2/g;
+
+# removing double spaces and spaces at the beginning and end of the line
+        $out =~ s/>([^ ])/> $1/g;
+        $out =~ s/([^ ])</$1 </g;
+        $out =~ s/[ \t]+/ /g;
+        $out =~ s/^[ \t]//g;
+        $out =~ s/[ \t]$//g;
+        $out =~ s/>[ ]+</></g;
 	print "$out\n";
 }
