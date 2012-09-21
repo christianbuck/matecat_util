@@ -67,34 +67,43 @@ class HMMAligner(object):
         a.reverse()
         return a
 
+    def init_q(self, src_len, tgt_len, alignment):
+        Q = [[None]*tgt_len*2 for s in range(src_len)]
+        for src_idx, tgt_idx in alignment:
+            assert len(tgt_idx)>0
+            if len(src_idx) == 0: # unaligned
+                pass
+
+
     def viterbi(self, src, tgt, pnull=0.4):
-        tgt_len = len(tgt)
-        Q = [[None]*tgt_len*2 for s in src]
-        jump_probs = self.transition_probs[tgt_len]
-        for j in range(len(src)):
-            w_s = src[j]
-            for i in range(2*tgt_len):  # a_j
-                w_t = 0
-                if i < tgt_len:
-                    w_t = tgt[i]
-                assert w_t in self.lex_probs
-                lex_prob = self.lex_probs.get(w_t, w_s, default=0.0)
+        I = len(src)
+        J = len(tgt)
+        Q = [[None]*I*2 for s in tgt]
+        jump_probs = self.transition_probs[I]
+        for j in range(J):
+            w_t = tgt[j]
+            for i in range(2*I):  # a_j
+                w_s = 0
+                if i < I:
+                    w_s = src[i]
+                assert w_s in self.lex_probs
+                lex_prob = self.lex_probs.get(w_s, w_t, default=0.0)
                 if j == 0: # first word
                     jump_prob = 1.0
                     Q[j][i] = (jump_prob * lex_prob, -1)
                 else:
                     best = None
                     q_max = max(p for p,back in Q[j-1])
-                    for k in range(2*len(tgt)): # a_{j-1}
+                    for k in range(2*I): # a_{j-1}
                         jump_prob = 0.0
-                        if i < tgt_len:
-                            if k < tgt_len:
+                        if i < I:
+                            if k < I:
                                 jump = i-k
                             else:
-                                jump = i-k+tgt_len
+                                jump = i-k+I
                             jump_prob = jump_probs.get(-jump, 0.)
                         else: # align to nullword
-                            if k==i or k == i-tgt_len:
+                            if k==i or k == i-I:
                                 jump_prob = pnull
                         prev_prob = Q[j-1][k][0]
                         if q_max > 0:
@@ -173,8 +182,8 @@ if __name__ == "__main__":
 
         # compute a target-to-source alignment:
         # each target word is aligned to none or one source words
-        alignment = hmm.align(tgt, src)
-        #alignment = hmm.align(src, tgt)
+        #alignment = hmm.align(tgt, src)
+        alignment = hmm.align(src, tgt)
         print alignment
 
 
