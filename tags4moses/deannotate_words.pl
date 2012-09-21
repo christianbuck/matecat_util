@@ -26,6 +26,8 @@ sub Usage(){
 	warn "Usage: template.pl [-help] [--encoding=type]\n";
 	warn "	-help 	\tprint this help\n";
 	warn "	-encoding=<type> 	\tinput and output encoding type\n";
+	warn "	-collapse> 	\tenable collapsing of adjacent tags\n";
+	warn "	-escape 	\tescape \n";
 
 }
 
