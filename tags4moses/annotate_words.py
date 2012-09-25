@@ -72,6 +72,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('-noescape', action='store_true', help='don\'t escape <,&,> and quotations')
     parser.add_argument('-nosource', action='store_true', help='don\'t include src attribute')
+    parser.add_argument('-sourceonly', action='store_true', help='text only, remove markup')
     args = parser.parse_args(sys.argv[1:])
 
     for line in sys.stdin:
@@ -95,8 +96,11 @@ if __name__ == "__main__":
 
         src = escape(" ".join(words), {"'":"&apos;", '"':"&quot;"})
         src = src.encode('utf-8')
-        if args.nosource:
-            print "<passthrough tag=\"%s\"/>%s" %(annotated_words, src)
+        if not args.sourceonly:
+            if args.nosource:
+                print "<passthrough tag=\"%s\"/>%s" %(annotated_words, src)
+            else:
+                print "<passthrough tag=\"%s\" src=\"%s\"/>%s" %(annotated_words, src, src)
         else:
-            print "<passthrough tag=\"%s\" src=\"%s\"/>%s" %(annotated_words, src, src)
+            print src
 
