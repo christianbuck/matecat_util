@@ -58,7 +58,10 @@ def anno_iter(tree, stack=None, tagid=None):
         for word in tree.text.split():
             yield word, stack[1:], 0
     else:
-        yield '', stack[1:], 1
+        if tree.text:
+            yield '', stack[1:], 2
+        else:
+            yield '', stack[1:], 1
     for child in tree:
         for res in anno_iter(child, stack, tagid):
             yield res
