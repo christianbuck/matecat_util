@@ -59,9 +59,11 @@ while (my $line=<STDIN>){
 	my @tags = split(/\|\|/,$tag);
 	my %xml = ();
 	my %endxml = ();
+	my %noposxml = ();
 	for (my $i=0; $i < scalar(@tags); $i++){
 #		print STDERR "tag[$i]:|$tags[$i]|\n";
-		my ($idx,$value) = ($tags[$i] =~ /(\d+)\#(.*?)$/);
+		my ($idx,$value,$nopos) = ($tags[$i] =~ /(\d+)\#(.*?)\#(\d+)$/);
+		$noposxml{$idx} = $nopos;
 		my $j = 0;
 		my @values = ();
 		while ($value =~ s/\&lt;(.+?)&gt;//){
@@ -88,7 +90,11 @@ while (my $line=<STDIN>){
         for (my $i=0; $i < scalar(@trgwords); $i+=2){
 		my $srcidx = $trgwords[$i+1];
 		if ($srcidx != -1 && defined($xml{$srcidx})){
-			$out .= $xml{$srcidx}.$trgwords[$i].$endxml{$srcidx}." ";
+                        if ($noposxml{$srcidx} == 1){
+                            $out .= $xml{$srcidx}.$trgwords[$i]." ";
+                        }else{
+                            $out .= $xml{$srcidx}.$trgwords[$i].$endxml{$srcidx}." ";
+                        }
 		}else{
 			$out .= "$trgwords[$i] ";
 		}
