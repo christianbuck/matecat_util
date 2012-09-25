@@ -56,21 +56,21 @@ def anno_iter(tree, stack=None, tagid=None):
     #    yield str(tree)
     if tree.text and tree.text.strip():
         for word in tree.text.split():
-            yield word, stack[1:]
+            yield word, stack[1:], 0
     else:
-        yield '', stack[1:]
+        yield '', stack[1:], 1
     for child in tree:
         for res in anno_iter(child, stack, tagid):
             yield res
     stack.pop()
     if tree.tail and tree.tail.strip():
         for word in tree.tail.split():
-            yield word, stack[1:]
+            yield word, stack[1:], 0
 
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('-noescape', action='store_true', help='don\'t escape <&> and quotations')
+    parser.add_argument('-noescape', action='store_true', help='don\'t escape <,&,> and quotations')
     parser.add_argument('-nosource', action='store_true', help='don\'t include src attribute')
     args = parser.parse_args(sys.argv[1:])
 
@@ -80,14 +80,13 @@ if __name__ == "__main__":
         tree = ET.parse(StringIO.StringIO(wrap_segment(line)))
         words = []
         annotated_words = []
-        for word, tagstack in anno_iter(tree.getroot(),[]):
-            #print len(words), word, tagstack
-            if tagstack:
-                annotated_words.append("%s#%s" %(len(words), "".join(tagstack)))
+        for word, tagstack, self_contained in anno_iter(tree.getroot(),[]):
+            for tag in tagstack:
+                annotated_words.append("%s#%s#%s" %(len(words), tag, self_contained))
+            assert self_contained or word.strip()
             if word.strip():
                 words.append(word)
         annotated_words = '||'.join(annotated_words)
-        #print annotated_words, " ".join(words)
 
         if not args.noescape:
             escaped_annotated_words = escape(annotated_words, {"'":"&apos;", '"':"&quot;"})
@@ -101,12 +100,3 @@ if __name__ == "__main__":
         else:
             print "<passthrough tag=\"%s\" src=\"%s\"/>%s" %(annotated_words, src, src)
 
-        #if annotated_words:
-        #    src = escape(" ".join(words), {"'":"&apos;", '"':"&quot;"})
-        #    src = src.encode('utf-8')
-        #    if args.nosource:
-        #        print "<passthrough tag=\"%s\"/>%s" %(annotated_words, src)
-        #    else:
-        #        print "<passthrough tag=\"%s\" src=\"%s\"/>%s" %(annotated_words, src, src)
-        #else:
-        #    print line
