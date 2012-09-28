@@ -98,7 +98,7 @@ class MosesProc(object):
 
         self.reader = ReadThread(self.proc.stdout, self.web_queue)
         self.reader.setDaemon(True)
-        self. reader.start()
+        self.reader.start()
 
     def close(self):
         self.source_queue.join() # wait until all items in source_queue are processed
