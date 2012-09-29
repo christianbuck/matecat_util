@@ -5,12 +5,12 @@ import threading
 import subprocess
 import cherrypy
 import json
-import codecs
+import logging
 import re
 
 def popen(cmd):
     cmd = cmd.split()
-    sys.stderr.write("executing: %s\n" %(" ".join(cmd)))
+    logging.info("executing: %s" %(" ".join(cmd)))
     return subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
 
 class Filter(object):
@@ -46,7 +46,7 @@ class WriteThread(threading.Thread):
             result_queue, source = self.source_queue.get()
             self.web_queue.put( (i, result_queue) )
             wrapped_src = u"<seg id=%s>%s</seg>\n" %(i, source)
-            print "writing to process: ", repr(wrapped_src)
+            logging.debug("writing to process: %s" %repr(wrapped_src))
             self.pipe.write(wrapped_src.encode("utf-8"))
             self.pipe.flush()
             i += 1
@@ -69,12 +69,11 @@ class ReadThread(threading.Thread):
                 assert result_queues, "unanswered requests\n"
                 return
             line = line.decode("utf-8").rstrip().split(" ", 1)
-            print "reader read: ", repr(line)
+            logging.debug("reader read: %s" %repr(line))
 
             found = False
-            print "looking for id %s in %s result queues" %(line[0], len(result_queues))
+            logging.debug("looking for id %s in %s result queues" %(line[0], len(result_queues)))
             for idx, (i, q) in enumerate(result_queues):
-                print i, line[0]
                 if i == int(line[0]):
                     if len(line) > 1:
                         q.put(line[1])
@@ -104,8 +103,7 @@ class MosesProc(object):
         self.source_queue.join() # wait until all items in source_queue are processed
         self.proc.stdin.close()
         self.proc.wait()
-        print "source_queue empty: ", self.source_queue.empty()
-
+        logging.debug("source_queue empty: %s" %self.source_queue.empty())
 
 def json_error(status, message, traceback, version):
     err = {"status":status, "message":message, "traceback":traceback, "version":version}
@@ -115,7 +113,6 @@ class Root(object):
     required_params = ["q", "key", "target", "source"]
 
     def __init__(self, queue, prepro_cmd=None, postpro_cmd=None, slang=None, tlang=None, pretty=False):
-        print prepro_cmd
         self.filter = Filter(remove_newlines=True, collapse_spaces=True)
         self.queue = queue
         self.prepro_cmd = []
@@ -184,7 +181,6 @@ class Root(object):
             return json.dumps(data, indent=2) + "\n"
         return json.dumps(data) + "\n"
 
-
     @cherrypy.expose
     def translate(self, **kwargs):
         response = cherrypy.response
@@ -194,9 +190,9 @@ class Root(object):
         if errors:
             cherrypy.response.status = 400
             return self._dump_json(errors)
-        print "Request:", kwargs["q"]
+        logging.debug("Request after preprocessing: %s" %kwargs["q"])
         q = self.filter.filter(self._prepro(kwargs["q"]))
-        print "Request after preprocessing:", q
+        logging.debug("Request after preprocessing: %s" %q)
         translation = ""
         if q.strip():
             result_queue = Queue.Queue()
@@ -219,8 +215,16 @@ if __name__ == "__main__":
     parser.add_argument('-pretty', action='store_true', help='pretty print json')
     parser.add_argument('-slang', action='store', help='source language code')
     parser.add_argument('-tlang', action='store', help='target language code')
+    parser.add_argument('-log', action='store', choices=['DEBUG', 'INFO'], help='logging level, default:DEBUG', default='DEBUG')
+    parser.add_argument('-logfile', action='store', help='logfile, default: write to stderr')
 
     args = parser.parse_args(sys.argv[1:])
+
+    logformat='%(asctime)s %(message)s'
+    if args.logfile:
+        logging.basicConfig(filename=args.logfile, format=logformat)
+    else:
+        logging.basicConfig(format=logformat)
 
     moses = MosesProc(" ".join((args.moses_path, args.moses_options)))
 
