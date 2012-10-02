@@ -134,7 +134,9 @@ def json_error(status, message, traceback, version):
 class Root(object):
     required_params = ["q", "key", "target", "source"]
 
-    def __init__(self, queue, prepro_cmd=None, postpro_cmd=None, slang=None, tlang=None, pretty=False):
+    def __init__(self, queue, prepro_cmd=None, postpro_cmd=None, slang=None,
+                 tlang=None, pretty=False, persistent_processes=False,
+                 timeout=30):
         self.filter = Filter(remove_newlines=True, collapse_spaces=True)
         self.queue = queue
         self.prepro_cmd = []
@@ -148,7 +150,9 @@ class Root(object):
             self.expected_params['source'] = slang.lower()
         if tlang:
             self.expected_params['target'] = tlang.lower()
+        self.persist = persistent_processes
         self.pretty = pretty
+        self.timeout = timeout
 
     def _check_params(self, params):
         errors = []
@@ -177,6 +181,11 @@ class Root(object):
                                   "code":400,
                                   "message":message}}
         return None
+
+    def _timeout_error(self, q, location):
+        errors = [{"originalquery":q, "location" : location}]
+        message = "Timeout after %ss" %self.timeout
+        return {"error": {"errors":errors, "code":400, "message":message}}
 
     def _pipe(self, proc, s):
         u_string = u"%s\n" %s
@@ -219,7 +228,12 @@ class Root(object):
         if q.strip():
             result_queue = Queue.Queue()
             self.queue.put((result_queue, q))
-            translation = result_queue.get()
+            try:
+                translation = result_queue.get(timeout=self.timeout)
+            except Queue.Empty:
+                return self._timeout_error(q, 'translation')
+
+        self.log("Translation before postprocessing: %s" %translation)
         translation = self._postpro(translation)
         self.log("Translation after postprocessing: %s" %translation)
         data = {"data" : {"translations" : [{"translatedText":translation}]}}
