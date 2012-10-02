@@ -27,7 +27,10 @@ def get_translation_from_json(d):
     return d['data']['translations'][0]['translatedText']
 
 def query_server(query):
-    response = urllib2.urlopen(query)
+    try:
+        response = urllib2.urlopen(query, timeout=10)
+    except:
+        return 'TIMEOUT'
     response_data = json.load(response)
     translation = get_translation_from_json(response_data)
     return translation
