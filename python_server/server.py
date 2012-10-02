@@ -10,8 +10,19 @@ import re
 
 def popen(cmd):
     cmd = cmd.split()
-    logging.info("executing: %s" %(" ".join(cmd)))
+    logger = logging.getLogger('translation_log.popen')
+    logger.info("executing: %s" %(" ".join(cmd)))
     return subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+
+def init_log(filename):
+    logger = logging.getLogger('translation_log')
+    logger.setLevel(logging.DEBUG)
+    fh = logging.FileHandler(filename)
+    fh.setLevel(logging.DEBUG)
+    logformat = '%(asctime)s %(thread)d - %(filename)s:%(lineno)s: %(message)s'
+    formatter = logging.Formatter(logformat)
+    fh.setFormatter(formatter)
+    logger.addHandler(fh)
 
 class Filter(object):
     def __init__(self, remove_newlines=True, collapse_spaces=True):
@@ -32,7 +43,6 @@ class Filter(object):
     def __collapse_spaces(self, s):
         return re.sub('\s\s+', ' ', s)
 
-
 class WriteThread(threading.Thread):
     def __init__(self, p_in, source_queue, web_queue):
         threading.Thread.__init__(self)
@@ -46,11 +56,15 @@ class WriteThread(threading.Thread):
             result_queue, source = self.source_queue.get()
             self.web_queue.put( (i, result_queue) )
             wrapped_src = u"<seg id=%s>%s</seg>\n" %(i, source)
-            logging.debug("writing to process: %s" %repr(wrapped_src))
+            self.log("writing to process: %s" %repr(wrapped_src))
             self.pipe.write(wrapped_src.encode("utf-8"))
             self.pipe.flush()
             i += 1
             self.source_queue.task_done()
+
+    def log(self, message):
+        logger = logging.getLogger('translation_log.writer')
+        logger.info(message)
 
 class ReadThread(threading.Thread):
     def __init__(self, p_out, web_queue):
@@ -69,10 +83,10 @@ class ReadThread(threading.Thread):
                 assert result_queues, "unanswered requests\n"
                 return
             line = line.decode("utf-8").rstrip().split(" ", 1)
-            logging.debug("reader read: %s" %repr(line))
+            self.log("reader read: %s" %repr(line))
 
             found = False
-            logging.debug("looking for id %s in %s result queues" %(line[0], len(result_queues)))
+            self.log("looking for id %s in %s result queues" %(line[0], len(result_queues)))
             for idx, (i, q) in enumerate(result_queues):
                 if i == int(line[0]):
                     if len(line) > 1:
@@ -83,6 +97,10 @@ class ReadThread(threading.Thread):
                     found = True
                     break
             assert found, "id %s not found!\n" %(line[0])
+
+    def log(self, message):
+        logger = logging.getLogger('translation_log.reader')
+        logger.info(message)
 
 class MosesProc(object):
     def __init__(self, cmd):
@@ -103,7 +121,11 @@ class MosesProc(object):
         self.source_queue.join() # wait until all items in source_queue are processed
         self.proc.stdin.close()
         self.proc.wait()
-        logging.debug("source_queue empty: %s" %self.source_queue.empty())
+        self.log("source_queue empty: %s" %self.source_queue.empty())
+
+    def log(self, message):
+        logger = logging.getLogger('translation_log.moses')
+        logger.info(message)
 
 def json_error(status, message, traceback, version):
     err = {"status":status, "message":message, "traceback":traceback, "version":version}
@@ -163,14 +185,14 @@ class Root(object):
         return proc.stdout.readline().decode("utf-8").rstrip()
 
     def _prepro(self, query):
-        if not hasattr(cherrypy.thread_data, 'prepro'):
+        if not self.persist or not hasattr(cherrypy.thread_data, 'prepro'):
             cherrypy.thread_data.prepro = map(popen, self.prepro_cmd)
         for proc in cherrypy.thread_data.prepro:
             query = self._pipe(proc, query)
         return query
 
     def _postpro(self, query):
-        if not hasattr(cherrypy.thread_data, 'postpro'):
+        if not self.persist or not hasattr(cherrypy.thread_data, 'postpro'):
             cherrypy.thread_data.postpro = map(popen, self.postpro_cmd)
         for proc in cherrypy.thread_data.postpro:
             query = self._pipe(proc, query)
@@ -190,41 +212,51 @@ class Root(object):
         if errors:
             cherrypy.response.status = 400
             return self._dump_json(errors)
-        logging.debug("Request after preprocessing: %s" %kwargs["q"])
+        self.log("Request before preprocessing: %s" %repr(kwargs["q"]))
         q = self.filter.filter(self._prepro(kwargs["q"]))
-        logging.debug("Request after preprocessing: %s" %q)
+        self.log("Request after preprocessing: %s" %repr(q))
         translation = ""
         if q.strip():
             result_queue = Queue.Queue()
             self.queue.put((result_queue, q))
             translation = result_queue.get()
         translation = self._postpro(translation)
+        self.log("Translation after postprocessing: %s" %translation)
         data = {"data" : {"translations" : [{"translatedText":translation}]}}
         return self._dump_json(data)
+
+    def log(self, message):
+        logger = logging.getLogger('translation_log')
+        logger.info(message)
 
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('-ip', action='store', help='server ip to bind to, default: localhost', default="127.0.0.1")
+    parser.add_argument('-ip', help='server ip to bind to, default: localhost', default="127.0.0.1")
     parser.add_argument('-port', action='store', help='server port to bind to, default: 8080', type=int, default=8080)
-    parser.add_argument('-nthreads', action='store', help='number of server threads, default: 8', type=int, default=8)
+    parser.add_argument('-nthreads', help='number of server threads, default: 8', type=int, default=8)
     parser.add_argument('-moses', dest="moses_path", action='store', help='path to moses executable', default="/home/buck/src/mosesdecoder/moses-cmd/src/moses")
     parser.add_argument('-options', dest="moses_options", action='store', help='moses options, including .ini -async-output -print-id', default="-f phrase-model/moses.ini -v 0 -threads 2 -async-output -print-id")
-    parser.add_argument('-prepro', action='store', nargs="+", help='complete call to preprocessing script including arguments')
-    parser.add_argument('-postpro', action='store', nargs="+", help='complete call to postprocessing script including arguments')
+    parser.add_argument('-prepro', nargs="+", help='complete call to preprocessing script including arguments')
+    parser.add_argument('-postpro', nargs="+", help='complete call to postprocessing script including arguments')
     parser.add_argument('-pretty', action='store_true', help='pretty print json')
-    parser.add_argument('-slang', action='store', help='source language code')
-    parser.add_argument('-tlang', action='store', help='target language code')
-    parser.add_argument('-log', action='store', choices=['DEBUG', 'INFO'], help='logging level, default:DEBUG', default='DEBUG')
-    parser.add_argument('-logfile', action='store', help='logfile, default: write to stderr')
+    parser.add_argument('-slang', help='source language code')
+    parser.add_argument('-tlang', help='target language code')
+    #parser.add_argument('-log', choices=['DEBUG', 'INFO'], help='logging level, default:DEBUG', default='DEBUG')
+    parser.add_argument('-logprefix', help='logfile prefix, default: write to stderr')
 
     args = parser.parse_args(sys.argv[1:])
 
-    logformat='%(asctime)s %(message)s'
-    if args.logfile:
-        logging.basicConfig(filename=args.logfile, format=logformat)
-    else:
-        logging.basicConfig(format=logformat)
+    #logformat='%(asctime)s %(message)s'
+    #if args.logfile:
+    #    logging.basicConfig(filename=args.logfile, format=logformat)
+    #else:
+    #    logging.basicConfig(format=logformat)
+
+    if args.logprefix:
+        init_log("%s.trans.log" %args.logprefix)
+        #logger = logging.getLogger('translation_log')
+        #logger.info('works!')
 
     moses = MosesProc(" ".join((args.moses_path, args.moses_options)))
 
@@ -233,6 +265,10 @@ if __name__ == "__main__":
                             'server.thread_pool': args.nthreads,
                             'server.socket_host': args.ip})
     cherrypy.config.update({'error_page.default': json_error})
+    cherrypy.config.update({'log.screen': True})
+    if args.logprefix:
+        cherrypy.config.update({'log.access_file': "%s.access.log" %args.logprefix,
+                                'log.error_file': "%s.error.log" %args.logprefix})
     cherrypy.quickstart(Root(moses.source_queue, args.prepro, args.postpro, args.slang, args.tlang, args.pretty))
 
     moses.close()
