@@ -277,9 +277,9 @@ if __name__ == "__main__":
     parser.add_argument('-slang', help='source language code')
     parser.add_argument('-tlang', help='target language code')
     #parser.add_argument('-log', choices=['DEBUG', 'INFO'], help='logging level, default:DEBUG', default='DEBUG')
-    parser.add_argument('-keeppipes', action='store_true', help='keep pre/postprocessing scripts running')
+    parser.add_argument('-nokeeppipes', action='store_false', help='don\'t keep pre/postprocessing scripts running')
     parser.add_argument('-logprefix', help='logfile prefix, default: write to stderr')
-    parser.add_argument('-timeout', help='timeout for external scripts, default: unlimited', type=int)
+    parser.add_argument('-timeout', help='timeout for call to translation engine, default: unlimited', type=int)
 
     args = parser.parse_args(sys.argv[1:])
 
@@ -309,6 +309,6 @@ if __name__ == "__main__":
                              prepro_cmd = args.prepro, postpro_cmd = args.postpro,
                              slang = args.slang, tlang = args.tlang,
                              pretty = args.pretty,
-                             persistent_processes = args.keeppipes))
+                             persistent_processes = args.nokeeppipes))
 
     moses.close()
