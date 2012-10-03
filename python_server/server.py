@@ -38,7 +38,9 @@ class Filter(object):
         return s
 
     def __remove_newlines(self, s):
-        return s.replace('\n',' ')
+        s = s.replace('\r\n',' ')
+        s = s.replace('\n',' ')
+        return s
 
     def __collapse_spaces(self, s):
         return re.sub('\s\s+', ' ', s)
