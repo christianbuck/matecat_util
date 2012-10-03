@@ -224,7 +224,7 @@ class Root(object):
             cherrypy.response.status = 400
             return self._dump_json(errors)
         self.log("Request before preprocessing: %s" %repr(kwargs["q"]))
-        q = self.filter.filter(self._prepro(kwargs["q"]))
+        q = self._prepro(self.filter.filter(kwargs["q"]))
         self.log("Request after preprocessing: %s" %repr(q))
         translation = ""
         if q.strip():
