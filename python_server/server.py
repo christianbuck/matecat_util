@@ -7,12 +7,22 @@ import cherrypy
 import json
 import logging
 import re
+from itertools import izip
+from threading import Timer
 
 def popen(cmd):
     cmd = cmd.split()
     logger = logging.getLogger('translation_log.popen')
     logger.info("executing: %s" %(" ".join(cmd)))
     return subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+
+def pclose(pipe):
+    def kill_pipe():
+        pipe.kill()
+    t = Timer(5., kill_pipe)
+    t.start()
+    pipe.terminate()
+    t.cancel()
 
 def init_log(filename):
     logger = logging.getLogger('translation_log')
@@ -138,7 +148,7 @@ class Root(object):
 
     def __init__(self, queue, prepro_cmd=None, postpro_cmd=None, slang=None,
                  tlang=None, pretty=False, persistent_processes=False,
-                 timeout=30):
+                 timeout=-1):
         self.filter = Filter(remove_newlines=True, collapse_spaces=True)
         self.queue = queue
         self.prepro_cmd = []
@@ -152,8 +162,8 @@ class Root(object):
             self.expected_params['source'] = slang.lower()
         if tlang:
             self.expected_params['target'] = tlang.lower()
-        self.persist = persistent_processes
-        self.pretty = pretty
+        self.persist = bool(persistent_processes)
+        self.pretty = bool(pretty)
         self.timeout = timeout
 
     def _check_params(self, params):
@@ -194,16 +204,21 @@ class Root(object):
         proc.stdin.write(u_string.encode("utf-8"))
         proc.stdin.flush()
         return proc.stdout.readline().decode("utf-8").rstrip()
+        #self.log("done.")
 
     def _prepro(self, query):
         if not self.persist or not hasattr(cherrypy.thread_data, 'prepro'):
+            if hasattr(cherrypy.thread_data, 'prepro'):
+                map(pclose, cherrypy.thread_data.prepro)
             cherrypy.thread_data.prepro = map(popen, self.prepro_cmd)
-        for proc in cherrypy.thread_data.prepro:
+        for proc, cmd in izip(cherrypy.thread_data.prepro, self.prepro_cmd):
             query = self._pipe(proc, query)
         return query
 
     def _postpro(self, query):
         if not self.persist or not hasattr(cherrypy.thread_data, 'postpro'):
+            if hasattr(cherrypy.thread_data, 'postpro'):
+                map(pclose, cherrypy.thread_data.postpro)
             cherrypy.thread_data.postpro = map(popen, self.postpro_cmd)
         for proc in cherrypy.thread_data.postpro:
             query = self._pipe(proc, query)
@@ -231,7 +246,10 @@ class Root(object):
             result_queue = Queue.Queue()
             self.queue.put((result_queue, q))
             try:
-                translation = result_queue.get(timeout=self.timeout)
+                if self.timeout and self.timeout > 0:
+                    translation = result_queue.get(timeout=self.timeout)
+                else:
+                    translation = result_queue.get()
             except Queue.Empty:
                 return self._timeout_error(q, 'translation')
 
