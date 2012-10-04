@@ -277,22 +277,19 @@ if __name__ == "__main__":
     parser.add_argument('-slang', help='source language code')
     parser.add_argument('-tlang', help='target language code')
     #parser.add_argument('-log', choices=['DEBUG', 'INFO'], help='logging level, default:DEBUG', default='DEBUG')
-    parser.add_argument('-nokeeppipes', action='store_false', help='don\'t keep pre/postprocessing scripts running')
     parser.add_argument('-logprefix', help='logfile prefix, default: write to stderr')
     parser.add_argument('-timeout', help='timeout for call to translation engine, default: unlimited', type=int)
+    # persistent threads
+    thread_options = parser.add_mutually_exclusive_group()
+    thread_options.add_argument('-persist', action='store_true', help='keep pre/postprocessing scripts running')
+    thread_options.add_argument('-nopersist', action='store_true', help='don\'t keep pre/postprocessing scripts running')
+
 
     args = parser.parse_args(sys.argv[1:])
-
-    #logformat='%(asctime)s %(message)s'
-    #if args.logfile:
-    #    logging.basicConfig(filename=args.logfile, format=logformat)
-    #else:
-    #    logging.basicConfig(format=logformat)
+    persistent_processes = args.persist
 
     if args.logprefix:
         init_log("%s.trans.log" %args.logprefix)
-        #logger = logging.getLogger('translation_log')
-        #logger.info('works!')
 
     moses = MosesProc(" ".join((args.moses_path, args.moses_options)))
 
@@ -309,6 +306,6 @@ if __name__ == "__main__":
                              prepro_cmd = args.prepro, postpro_cmd = args.postpro,
                              slang = args.slang, tlang = args.tlang,
                              pretty = args.pretty,
-                             persistent_processes = args.nokeeppipes))
+                             persistent_processes = persistent_processes))
 
     moses.close()
