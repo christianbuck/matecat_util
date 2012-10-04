@@ -284,11 +284,8 @@ if __name__ == "__main__":
     thread_options.add_argument('-persist', action='store_true', help='keep pre/postprocessing scripts running')
     thread_options.add_argument('-nopersist', action='store_true', help='don\'t keep pre/postprocessing scripts running')
 
-
     args = parser.parse_args(sys.argv[1:])
     persistent_processes = not args.nopersist
-    print persistent_processes
-    sys.exit()
 
     if args.logprefix:
         init_log("%s.trans.log" %args.logprefix)
