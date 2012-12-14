@@ -23,10 +23,10 @@ my $optional_params = 5; # maximum number of optional free parameters
 
 # command description
 sub Usage(){
-	warn "Usage: template.pl [-help] [--encoding=type]\n";
+	warn "Usage: deannotate_words.pl [options] < input > output\n";
 	warn "	-help 	\tprint this help\n";
 	warn "	-encoding=<type> 	\tinput and output encoding type\n";
-	warn "	-collapse> 	\tenable collapsing of adjacent tags\n";
+	warn "	-collapse 	\tenable collapsing of adjacent tags\n";
 	warn "	-escape 	\tescape \n";
 
 }
@@ -42,6 +42,7 @@ while (my $line=<STDIN>){
 	chomp($line);
 #	print STDERR "line:|$line|\n";
 	my ($passthrough,$trans) = ($line =~ /(^<passthrough[^>]*\/>)(.*)$/);
+#$trans = "DUMMY |0| $trans";
 
 #	print STDERR "passthough:|$passthrough|\n";
 #	print STDERR "trans:|$trans|\n";
@@ -59,30 +60,36 @@ while (my $line=<STDIN>){
 	my @tags = split(/\|\|/,$tag);
 	my %xml = ();
 	my %endxml = ();
-	my %noposxml = ();
+	my %typexml = ();
 	for (my $i=0; $i < scalar(@tags); $i++){
 #		print STDERR "tag[$i]:|$tags[$i]|\n";
-		my ($idx,$value,$nopos) = ($tags[$i] =~ /(\d+)\#(.*?)\#(\d+)$/);
-		$noposxml{$idx} = $nopos;
-		my $j = 0;
-		my @values = ();
-		while ($value =~ s/\&lt;(.+?)&gt;//){
-			$values[$j] = $1;
-			$values[$j] =~ /^([^ \t]*)([ \t].+)?$/;
-			$mainvalues[$j] = $1;
-#			print STDERR "idx:$idx val:|$value| value:|$value| j:$j values[$j]:|$values[$j]| mainvalues[$j]:|$mainvalues[$j]|\n";
-			$j++;
+		my ($idx,$value,$type) = ($tags[$i] =~ /(\d+)\#(.*?)\#(\d+)$/);
+
+		$value =~ s/\&lt;(.+?)&gt;/$1/;
+		$value =~ /^([^ \t]*)([ \t].+)?$/;
+		my $mainvalue = $1;
+
+ 		if (!defined($xml{$idx})){
+			$xml{$idx} = "";	
+			$endxml{$idx} = "";	
+			$typexml{$idx} = "";	
 		}
-		#$value =~ s/\&gt;/\>/g;
-		#$value =~ s/\&lt;/\</g;
-		#$value =~ s/\&quot;/\"/g;
-		$xml{$idx} = "";
-		$endxml{$idx} = "";
-		for ($j=0;$j < scalar(@values); $j++){
-			$xml{$idx} .= "<$values[$j]>";
-			$endxml{$idx} .= "</".$mainvalues[scalar(@values)-$j-1].">";
-		}
-#		print STDERR "i:$i idx:$idx xml{$idx}:|$xml{$idx}| endxml{$idx}:|$endxml{$idx}|\n";
+		if ($type == 0){
+                        $xml{$idx} .= "<$value>";
+                        $endxml{$idx} = "</$mainvalue>$endxml{$idx}";
+			$typexml{$idx} = $type;	
+                }elsif ($type == 1){
+                        $xml{$idx} .= "<$value/>";
+                        $endxml{$idx} .= "";
+                        $typexml{$idx} = $type;
+                }elsif ($type == 2){
+                        $xml{$idx} .= "<$value></$mainvalue>";
+#                        $endxml{$idx} .= "</$mainvalue>";
+                        $typexml{$idx} = $type;
+                }else{
+                        die "Third field should have one of the following values: 0, 1, 2\n";
+                }
+#                print STDERR "INSIDE:$i idx:$idx type:$typexml{$idx} xml{$idx}:|$xml{$idx}| endxml{$idx}:|$endxml{$idx}|\n";
 
 	}
 #reconctructing the tagged output
@@ -90,11 +97,15 @@ while (my $line=<STDIN>){
         for (my $i=0; $i < scalar(@trgwords); $i+=2){
 		my $srcidx = $trgwords[$i+1];
 		if ($srcidx != -1 && defined($xml{$srcidx})){
-                        if ($noposxml{$srcidx} == 1){
+                        if ($typexml{$srcidx} == 0){
+                            $out .= $xml{$srcidx}.$trgwords[$i].$endxml{$srcidx}." ";
+                        }elsif ($typexml{$srcidx} == 1){
+                            $out .= $xml{$srcidx}.$trgwords[$i]." ";
+                        }elsif ($typexml{$srcidx} == 2){
                             $out .= $xml{$srcidx}.$trgwords[$i]." ";
                         }else{
-                            $out .= $xml{$srcidx}.$trgwords[$i].$endxml{$srcidx}." ";
-                        }
+				die "Third field should have one of the following values: 0, 1, 2\n";
+ 			}
 		}else{
 			$out .= "$trgwords[$i] ";
 		}
@@ -106,14 +117,16 @@ while (my $line=<STDIN>){
 		my $newout = "";
 		while ($contflag){
 			$contflag=0;
+			$newout = "";
+#                        print STDERR "START EXT WHILE contflag:|$contflag|\n";
 #                      print STDERR "out:|$out|\n";
 
-			while ($out =~ s/(.*?)(<\/[ ]*([^ >]+?)[ ]*>[ \t]*<(([^ \t>]+)([ \t][^>]*>|>)))//){
+			while ($out =~ s/(.*?)(<\/[ ]*([^ >]+?)[ ]*>[ \t]*<(([^ \t>\/]+?)([ \t][^>]*>|>)))//){
 
 				$newout .= " $1 ";
 				my $endtag = $3;
 				my $starttag = $5;
- #                               print STDERR "endtag:|$endtag| starttag:|$starttag|\n";
+#                                print STDERR "endtag:|$endtag| starttag:|$starttag|\n";
 				if ($endtag eq $starttag){
 					$contflag=1;
 				}
@@ -121,12 +134,17 @@ while (my $line=<STDIN>){
 				{
 					$newout .= " $2 ";
 				}
-#                        print STDERR "newout:|$newout|\n";
-#                        print STDERR "out:|$out|\n";
+#                	        print STDERR "newout:|$newout|\n";
+#                        	print STDERR "out:|$out|\n";
 			}
+			$newout .= " $out ";
+			$out = $newout;
+#                	print STDERR "newout:|$newout|\n";
+#                	print STDERR "out:|$out|\n";
+#                        print STDERR "END EXT WHILE contflag:|$contflag|\n";
 		}
-		$newout .= " $out ";
-		$out = $newout;
+		#$newout .= " $out ";
+		#$out = $newout;
 	}
 
 # escaping (or not) some characters
@@ -140,7 +158,7 @@ while (my $line=<STDIN>){
 	}
 
 # removing index of tags
-        $out =~ s/(<\/?)([^> ]+)_\d+/$1$2/g;
+#        $out =~ s/(<\/?)([^> ]+)_\d+/$1$2/g;
 
 # removing double spaces and spaces at the beginning and end of the line
         $out =~ s/>([^ ])/> $1/g;
