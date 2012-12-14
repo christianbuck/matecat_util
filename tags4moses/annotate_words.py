@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 
 import sys
-import StringIO
 from xml.sax.saxutils import escape, unescape
 from resilientparser import ResilientParser
 
@@ -17,32 +16,6 @@ def make_tag(tag, tag_id, attrib=None):
         attribs = " ".join([make_attrib(key, val) for key, val in attrib])
         return "<%s_%s %s>" %(tag, tag_id, attribs)
     return "<%s_%s>" %(tag, tag_id)
-
-
-def anno_iter(tree, stack=None, tagid=None):
-    if stack == None:
-        stack = []
-    if tagid == None:
-        tagid = [0] # we need a mutable type here
-    stack.append( make_tag(tree.tag, tagid[0], tree.attrib) )
-    tagid[0] += 1
-    #if type(tree) == ET._Comment:
-    #    yield str(tree)
-    if tree.text and tree.text.strip():
-        for word in tree.text.split():
-            yield word, stack[1:], 0
-    else:
-        if tree.text:
-            yield '', stack[1:], 2
-        else:
-            yield '', stack[1:], 1
-    for child in tree:
-        for res in anno_iter(child, stack, tagid):
-            yield res
-    stack.pop()
-    if tree.tail and tree.tail.strip():
-        for word in tree.tail.split():
-            yield word, stack[1:], 0
 
 def parse_line(line):
   parser = ResilientParser()
