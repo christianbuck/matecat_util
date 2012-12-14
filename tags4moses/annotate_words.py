@@ -3,34 +3,10 @@
 import sys
 import StringIO
 from xml.sax.saxutils import escape, unescape
-
-# import chain from http://lxml.de/tutorial.html
-try:
-  from lxml import etree as ET
-except ImportError:
-  try:
-    # Python 2.5
-    import xml.etree.cElementTree as ET
-    print("running with cElementTree on Python 2.5+")
-  except ImportError:
-    try:
-      # Python 2.5
-      import xml.etree.ElementTree as ET
-      print("running with ElementTree on Python 2.5+")
-    except ImportError:
-      try:
-        # normal cElementTree install
-        import cElementTree as ET
-        print("running with cElementTree")
-      except ImportError:
-        try:
-          # normal ElementTree install
-          import elementtree.ElementTree as ET
-          print("running with ElementTree")
-        except ImportError:
-          print("Failed to import ElementTree from any known place")
+from resilientparser import ResilientParser
 
 def make_attrib(name, val):
+    # change quotation character from " to ' if " appears within the value
     quot = '"'
     if '"' in val:
         quot = "'"
@@ -38,12 +14,10 @@ def make_attrib(name, val):
 
 def make_tag(tag, tag_id, attrib=None):
     if attrib:
-        attribs = " ".join([make_attrib(key, val) for key, val in attrib.items()])
+        attribs = " ".join([make_attrib(key, val) for key, val in attrib])
         return "<%s_%s %s>" %(tag, tag_id, attribs)
     return "<%s_%s>" %(tag, tag_id)
 
-def wrap_segment(line):
-    return "<seg>%s</seg>" %line
 
 def anno_iter(tree, stack=None, tagid=None):
     if stack == None:
@@ -70,6 +44,13 @@ def anno_iter(tree, stack=None, tagid=None):
         for word in tree.tail.split():
             yield word, stack[1:], 0
 
+def parse_line(line):
+  parser = ResilientParser()
+  annotation, tokens = parser.process(line)
+  tokens.insert(0, None)
+  for idx, token in enumerate(tokens):
+    yield idx, token, annotation[idx]
+
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
@@ -80,16 +61,15 @@ if __name__ == "__main__":
 
     for line in sys.stdin:
         line = line.strip()
-        #print 'parsing:', line
-        tree = ET.parse(StringIO.StringIO(wrap_segment(line)))
         words = []
         annotated_words = []
-        for word, tagstack, self_contained in anno_iter(tree.getroot(),[]):
-            for tag in tagstack:
-                annotated_words.append("%s#%s#%s" %(len(words), tag, self_contained))
-            assert self_contained or word.strip()
-            if word.strip():
-                words.append(word)
+        for idx, word, annotation in parse_line(line):
+          for tag, attr, tag_idx, tag_type in annotation:
+            t = make_tag(tag, tag_idx, attr)
+            annotated_words.append("%s#%s#%s" %(idx, t, tag_type))
+          if word != None and word.strip():
+            words.append(word)
+          assert idx == len(words)
         annotated_words = '||'.join(annotated_words)
 
         if not args.noescape:
@@ -106,4 +86,3 @@ if __name__ == "__main__":
                 print "<passthrough tag=\"%s\" src=\"%s\"/>%s" %(annotated_words, src, src)
         else:
             print src
-
