@@ -3,6 +3,7 @@
 import sys
 from HTMLParser import HTMLParser
 from collections import defaultdict
+import re
 
 class TagTypes():
     CONTAINS_NONEMPTY_TEXT = 0     # ex: <a>data</a>
@@ -47,22 +48,37 @@ class ResilientParser(HTMLParser):
         assert not self.stack
         return self.annotated_data, self.tokens
 
+    def get_cased_start_tag(self, expected_tag=None):
+        re_tag = re.compile('<(?P<tag_name>[^/\s]+)[^>]*>')
+        text = self.get_starttag_text()
+        if not text:
+            assert not expected_tag
+        else:
+            m = re_tag.match(text)
+            assert m
+            if expected_tag:
+                assert m.group('tag_name').lower() == expected_tag, "found %s but expected %s\n" %(m.group('tag_name'), expected_tag)
+            return m.group('tag_name')
+        return None
+
     def handle_starttag(self, tag, attrs):
+        cased_tag = self.get_cased_start_tag(tag)
+        assert cased_tag != None
         self.tag_idx += 1
-        self.stack.append( (tag, attrs, self.tag_idx) )
+        self.stack.append( (cased_tag, attrs, self.tag_idx) )
         if self.first_pass:
             # initially assume that tag is properly closed but contains no text
-            self.tag_types[self.tag_idx] = (tag, TagTypes.CONTAINS_EMPTY_TEXT)
+            self.tag_types[self.tag_idx] = (cased_tag, TagTypes.CONTAINS_EMPTY_TEXT)
         else:
             assert self.tag_idx in self.tag_types
-            assert self.tag_types[self.tag_idx][0] == tag
+            assert self.tag_types[self.tag_idx][0] == cased_tag
             if self.tag_types[self.tag_idx][1] == TagTypes.OPENED_BUT_UNCLOSED:
                 self.annotated_data[len(self.tokens)].append(
-                    (tag, attrs, self.tag_idx, TagTypes.OPENED_BUT_UNCLOSED) )
+                    (cased_tag, attrs, self.tag_idx, TagTypes.OPENED_BUT_UNCLOSED) )
                 self.stack.pop()
             elif self.tag_types[self.tag_idx][1] == TagTypes.CONTAINS_EMPTY_TEXT:
                 self.annotated_data[len(self.tokens)].append(
-                    (tag, attrs, self.tag_idx, TagTypes.CONTAINS_EMPTY_TEXT) )
+                    (cased_tag, attrs, self.tag_idx, TagTypes.CONTAINS_EMPTY_TEXT) )
                 # pop stack in handle_endtag
 
     def handle_data(self, data):
@@ -70,15 +86,18 @@ class ResilientParser(HTMLParser):
         if not data.strip():
             return
         if self.first_pass:
-            for t,a,i in self.stack:
-                self.tag_types[i] = (t, TagTypes.CONTAINS_NONEMPTY_TEXT)
+            for cased_tag,a,i in self.stack:
+                assert i in self.tag_types
+                assert cased_tag == self.tag_types[i][0]
+                self.tag_types[i] = (cased_tag, TagTypes.CONTAINS_NONEMPTY_TEXT)
         else:
             for token in data.strip().split():
                 self.tokens.append(token)
-                for t,a,i in self.stack:
-                    assert self.tag_types[i] == (t, TagTypes.CONTAINS_NONEMPTY_TEXT)
+                for cased_tag,a,i in self.stack:
+                    assert cased_tag == self.tag_types[i][0]
+                    assert self.tag_types[i][1] == TagTypes.CONTAINS_NONEMPTY_TEXT
                     self.annotated_data[len(self.tokens)].append(
-                        (t, a, i, TagTypes.CONTAINS_NONEMPTY_TEXT) )
+                        (cased_tag, a, i, TagTypes.CONTAINS_NONEMPTY_TEXT) )
                 self.token_idx += 1
         assert len(self.tokens) == self.token_idx
 
@@ -86,11 +105,17 @@ class ResilientParser(HTMLParser):
         self.tag_idx += 1
         if self.first_pass:
             # no need to put this on the stack
-            self.tag_types[self.tag_idx] = (tag, TagTypes.SELF_CONTAINED)
+            cased_tag = self.get_cased_start_tag(tag)
+            assert cased_tag != None
+            self.tag_types[self.tag_idx] = (cased_tag, TagTypes.SELF_CONTAINED)
         else:
-            assert self.tag_types[self.tag_idx] == (tag, TagTypes.SELF_CONTAINED)
+            print tag, self.get_starttag_text()
+            assert self.tag_types[self.tag_idx][1] == TagTypes.SELF_CONTAINED
+            assert self.tag_types[self.tag_idx][0].lower() == tag
+            cased_tag = self.tag_types[self.tag_idx][0]
+            assert cased_tag != None
             self.annotated_data[self.token_idx].append(
-                (tag, attrs, self.tag_idx, TagTypes.SELF_CONTAINED) )
+                (cased_tag, attrs, self.tag_idx, TagTypes.SELF_CONTAINED) )
 
     def handle_endtag(self, tag):
         if self.first_pass:
@@ -121,8 +146,10 @@ class ResilientParser(HTMLParser):
             # case of correct markup
             if not self.stack or self.stack[-1][0] != tag:
                 self.tag_idx += 1
+                cased_tag = self.get_cased_start_tag(tag)
+                assert cased_tag != None
                 self.annotated_data[self.token_idx].append(
-                    (tag, {}, self.tag_idx, TagTypes.CLOSED_BUT_UNOPENED))
+                    (cased_tag, {}, self.tag_idx, TagTypes.CLOSED_BUT_UNOPENED))
             else:
                 assert self.stack
                 assert self.stack[-1][0] == tag
