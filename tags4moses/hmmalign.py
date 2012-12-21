@@ -116,11 +116,8 @@ class HMMAligner(object):
                     q_max = 1.0
                     try:
                         q_max = max(q[0] for q in Q[j-1] if not q==None)
-                        #q_max = q_max[0]
                     except ValueError:
                         pass
-                    #print Q[j-1]
-                    #print 'q_max:', q_max
                     for k in range(2*I): # a_{j-1}
                         jump_prob = 0.0
                         if i < I:
@@ -133,19 +130,17 @@ class HMMAligner(object):
                             if k==i or k == i-I:
                                 jump_prob = pnull
                         prev_prob = Q[j-1][k][0]
-                        #print "prev_prob:", prev_prob
                         if q_max > 0:
                             prev_prob /= q_max
-                        #print "jump_prob:", jump_prob
-                        #print "prev_prob:", prev_prob
                         prob = jump_prob * prev_prob
                         if best == None or best[1] < prob:
                             best = (k, prob)
                     Q[j][i] = (best[1]*lex_prob, best[0])
-        #self.printQ(Q, transpose=True)
+        #self.__printQ(Q, transpose=True)
         return Q
 
-    def printQ(self, Q, transpose=False):
+    def __printQ(self, Q, transpose=False):
+        """ mostly for debugging """
         if transpose:
             for j in range(len(Q)):
                 for i in range(len(Q[0])):
