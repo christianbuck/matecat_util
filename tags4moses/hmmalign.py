@@ -29,7 +29,12 @@ class Vocabulary(object):
 class LexTrans(object):
     def __init__(self, f, min_p=0.0):
         self.lex_probs = defaultdict(dict)
-        for src, tgt, cnt, p in imap(str.split, f):
+        for line in imap(str.split, f):
+            if len(line) == 3:
+                src, tgt, p = line
+            else:
+                assert len(line) == 4
+                src, tgt, cnt, p = line
             if float(p) > min_p:
                 self.lex_probs[int(src)][int(tgt)] = float(p)   # p(tgt|src)
 
