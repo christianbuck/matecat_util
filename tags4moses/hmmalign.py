@@ -20,8 +20,10 @@ class Vocabulary(object):
             inv_voc[idx] = word
         return voc, inv_voc
 
-    def map_sentence(self, snt):
+    def map_sentence(self, snt, lowercase=False):
         snt = snt.strip().split()
+        if lowercase:
+            snt = snt.lower()
         return [self.voc.get(w,0) for w in snt]
 
 class LexTrans(object):
@@ -182,7 +184,8 @@ if __name__ == "__main__":
     parser.add_argument('sourcevoc', action='store', help="source vocabulary")
     parser.add_argument('targetvoc', action='store', help="target vocabulary")
     parser.add_argument('-pnull', action='store', type=float, help="jump probability to/from NULL word (default: 0.4)", default=0.4)
-    parser.add_argument('-verbose', action='store_true', help='more output', default=False)
+    parser.add_argument('-lower', action='store_true', help='lowercase input')
+    parser.add_argument('-verbose', action='store_true', help='more output')
     args = parser.parse_args(sys.argv[1:])
 
     hmm = HMMAligner(smart_open(args.hmmfile), smart_open(args.lexprobs))
@@ -200,8 +203,8 @@ if __name__ == "__main__":
         if args.verbose:
             sys.stderr.write("src: %s\ntgt: %s\nalign: %s\n" (src_txt, tgt_txt, str(align)))
 
-        src = src_voc.map_sentence(src_txt)
-        tgt = tgt_voc.map_sentence(tgt_txt)
+        src = src_voc.map_sentence(src_txt, args.lower)
+        tgt = tgt_voc.map_sentence(tgt_txt, args.lower)
 
         if args.verbose:
             sys.stderr.write("src: %s\ntgt: %s\n" (str(src), str(tgt)))
