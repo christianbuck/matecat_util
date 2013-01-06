@@ -42,7 +42,7 @@ class ResilientParser(HTMLParser):
     def process(self, line):
         self.reset()
         self.feed(line)
-        sys.stderr.write("starting second pass. tag_types: %s\n" %(self.tag_types))
+        #sys.stderr.write("starting second pass. tag_types: %s\n" %(self.tag_types))
         self.start_second_pass()
         self.feed(line)
         assert not self.stack
@@ -109,7 +109,7 @@ class ResilientParser(HTMLParser):
             assert cased_tag != None
             self.tag_types[self.tag_idx] = (cased_tag, TagTypes.SELF_CONTAINED)
         else:
-            print tag, self.get_starttag_text()
+            #print tag, self.get_starttag_text()
             assert self.tag_types[self.tag_idx][1] == TagTypes.SELF_CONTAINED
             assert self.tag_types[self.tag_idx][0].lower() == tag
             cased_tag = self.tag_types[self.tag_idx][0]
