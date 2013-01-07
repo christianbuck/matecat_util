@@ -32,7 +32,7 @@ if __name__ == "__main__":
     parser.add_argument('-sourceonly', action='store_true', help='text only, remove markup')
     args = parser.parse_args(sys.argv[1:])
 
-    for line in sys.stdin:
+    for line in iter(sys.stdin.readline, ''):
         line = line.strip()
         words = []
         annotated_words = []
@@ -54,8 +54,9 @@ if __name__ == "__main__":
         src = src.encode('utf-8')
         if not args.sourceonly:
             if args.nosource:
-                print "<passthrough tag=\"%s\"/>%s" %(annotated_words, src)
+                sys.stdout.write("<passthrough tag=\"%s\"/>%s\n" %(annotated_words, src))
             else:
-                print "<passthrough tag=\"%s\" src=\"%s\"/>%s" %(annotated_words, src, src)
+                sys.stdout.write("<passthrough tag=\"%s\" src=\"%s\"/>%s\n" %(annotated_words, src, src))
         else:
-            print src
+            sys.stdout.write("%s\n" %(src))
+        sys.stdout.flush()
