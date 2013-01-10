@@ -1,5 +1,13 @@
 #!/usr/bin/perl -w
 
+#map taken from resilientparser.py
+
+use constant CONTAINS_NONEMPTY_TEXT => 0;
+use constant CONTAINS_EMPTY_TEXT => 1;
+use constant SELF_CONTAINED => 2;
+use constant OPENED_BUT_UNCLOSED => 3;
+use constant CLOSED_BUT_UNOPENED => 4;
+
 #use MateCat;
 use Getopt::Long;
 
@@ -40,29 +48,22 @@ if (scalar(@ARGV) < $required_params || scalar(@ARGV) > ($required_params+$optio
 
 while (my $line=<STDIN>){
 	chomp($line);
-#	print STDERR "line:|$line|\n";
 	my ($passthrough,$trans) = ($line =~ /(^<passthrough[^>]*\/>)(.*)$/);
-#$trans = "DUMMY |0| $trans";
-
-#	print STDERR "passthough:|$passthrough|\n";
-#	print STDERR "trans:|$trans|\n";
 
 #parsing translation
 	my @trgwords = split (/[ \t]+/, $trans);
 	# eve entries contain words, eodd entries contain word-alignemnt
 	for (my $i=0; $i < scalar(@trgwords); $i+=2){
 		$trgwords[$i+1] =~ s/\|//g; #remove pipeline from word alignemnt
-#		print STDERR "i:$i word:$trgwords[$i] al:",$trgwords[$i+1],"\n";
 	}
+
 #parsing passthrough
 	my ($tag) = ($passthrough =~ /<passthrough[ \t]+tag=\"(.*?)\".*\/>/);
-#	print STDERR "tag:|$tag|\n";
 	my @tags = split(/\|\|/,$tag);
 	my %xml = ();
 	my %endxml = ();
 	my %typexml = ();
 	for (my $i=0; $i < scalar(@tags); $i++){
-#		print STDERR "tag[$i]:|$tags[$i]|\n";
 		my ($idx,$value,$type) = ($tags[$i] =~ /(\d+)\#(.*?)\#(\d+)$/);
 
 		$value =~ s/\&lt;(.+?)&gt;/$1/;
@@ -74,36 +75,45 @@ while (my $line=<STDIN>){
 			$endxml{$idx} = "";	
 			$typexml{$idx} = "";	
 		}
-		if ($type == 0){
+		if ($type == CONTAINS_NONEMPTY_TEXT ){
                         $xml{$idx} .= "<$value>";
                         $endxml{$idx} = "</$mainvalue>$endxml{$idx}";
 			$typexml{$idx} = $type;	
-                }elsif ($type == 1){
-                        $xml{$idx} .= "<$value/>";
-                        $endxml{$idx} .= "";
-                        $typexml{$idx} = $type;
-                }elsif ($type == 2){
+                }elsif ($type == CONTAINS_EMPTY_TEXT){
                         $xml{$idx} .= "<$value></$mainvalue>";
-#                        $endxml{$idx} .= "</$mainvalue>";
+                        $typexml{$idx} = $type;
+                }elsif ($type == SELF_CONTAINED){
+                        $xml{$idx} .= "<$value />";
+                        $typexml{$idx} = $type;
+                }elsif ($type == OPENED_BUT_UNCLOSED){
+                        $xml{$idx} .= "<$value>";
+                        $typexml{$idx} = $type;
+                }elsif ($type == CLOSED_BUT_UNOPENED){
+                        $xml{$idx} .= "</$mainvalue>";
                         $typexml{$idx} = $type;
                 }else{
-                        die "Third field should have one of the following values: 0, 1, 2\n";
+                        die "Third field should have one of the following values: ",join(",",(CONTAINS_NONEMPTY_TEXT,CONTAINS_EMPTY_TEXT,SELF_CONTAINED,OPENED_BUT_UNCLOSED,CLOSED_BUT_UNOPENED)),"\n";
                 }
-#                print STDERR "INSIDE:$i idx:$idx type:$typexml{$idx} xml{$idx}:|$xml{$idx}| endxml{$idx}:|$endxml{$idx}|\n";
-
 	}
+
 #reconctructing the tagged output
 	my $out ="";
         for (my $i=0; $i < scalar(@trgwords); $i+=2){
 		my $srcidx = $trgwords[$i+1];
 		if ($srcidx != -1 && defined($xml{$srcidx})){
-                        if ($typexml{$srcidx} == 0){
+                        if ($typexml{$srcidx} == CONTAINS_NONEMPTY_TEXT){
                             $out .= $xml{$srcidx}.$trgwords[$i].$endxml{$srcidx}." ";
-                        }elsif ($typexml{$srcidx} == 1){
+                        }elsif ($typexml{$srcidx} == CONTAINS_EMPTY_TEXT){
                             $out .= $xml{$srcidx}.$trgwords[$i]." ";
-                        }elsif ($typexml{$srcidx} == 2){
+                        }elsif ($typexml{$srcidx} == SELF_CONTAINED){
+			    $out .= $xml{$srcidx}.$trgwords[$i]." ";
+			}elsif ($typexml{$srcidx} == OPENED_BUT_UNCLOSED){
                             $out .= $xml{$srcidx}.$trgwords[$i]." ";
+                        }elsif ($typexml{$srcidx} == CLOSED_BUT_UNOPENED){
+                            $out .= $xml{$srcidx}.$trgwords[$i]." ";
+
                         }else{
+                            die "Third field should have one of the following values: ",join(",",(CONTAINS_NONEMPTY_TEXT,CONTAINS_EMPTY_TEXT,SELF_CONTAINED,OPENED_BUT_UNCLOSED,CLOSED_BUT_UNOPENED)),"\n";
 				die "Third field should have one of the following values: 0, 1, 2\n";
  			}
 		}else{
@@ -118,15 +128,12 @@ while (my $line=<STDIN>){
 		while ($contflag){
 			$contflag=0;
 			$newout = "";
-#                        print STDERR "START EXT WHILE contflag:|$contflag|\n";
-#                      print STDERR "out:|$out|\n";
 
 			while ($out =~ s/(.*?)(<\/[ ]*([^ >]+?)[ ]*>[ \t]*<(([^ \t>\/]+?)([ \t][^>]*>|>)))//){
 
 				$newout .= " $1 ";
 				my $endtag = $3;
 				my $starttag = $5;
-#                                print STDERR "endtag:|$endtag| starttag:|$starttag|\n";
 				if ($endtag eq $starttag){
 					$contflag=1;
 				}
@@ -134,18 +141,14 @@ while (my $line=<STDIN>){
 				{
 					$newout .= " $2 ";
 				}
-#                	        print STDERR "newout:|$newout|\n";
-#                        	print STDERR "out:|$out|\n";
 			}
 			$newout .= " $out ";
 			$out = $newout;
-#                	print STDERR "newout:|$newout|\n";
-#                	print STDERR "out:|$out|\n";
-#                        print STDERR "END EXT WHILE contflag:|$contflag|\n";
 		}
-		#$newout .= " $out ";
-		#$out = $newout;
 	}
+
+# removing index of tags
+        $out =~ s/(<\/?)([^> ]+)_\d+/$1$2/g;
 
 # escaping (or not) some characters
 	if ($escape){
@@ -156,9 +159,6 @@ while (my $line=<STDIN>){
 		$out =~ s/\&amp;/\&/g;
 		$out =~ s/\&quot;/\"/g;
 	}
-
-# removing index of tags
-#        $out =~ s/(<\/?)([^> ]+)_\d+/$1$2/g;
 
 # removing double spaces and spaces at the beginning and end of the line
         $out =~ s/>([^ ])/> $1/g;
