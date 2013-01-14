@@ -17,10 +17,12 @@ my $help = undef;
 my $enc = UTF8;
 my $collapse = 0;
 my $escape = 0;
+my $bflag = 0;
 
 # parameter definition
 GetOptions(
   "help" => \$help,
+  "b" => \$bflag,
   "encoding=s" => \$enc,
   "collapse" => \$collapse,
   "escape" => \$escape,
@@ -43,6 +45,8 @@ if (scalar(@ARGV) < $required_params || scalar(@ARGV) > ($required_params+$optio
     &Usage();
     exit;
 }
+
+if ($bflag){ $| = 1; }
 
 ### insert here the code
 
