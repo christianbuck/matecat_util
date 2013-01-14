@@ -52,12 +52,13 @@ class LexTrans(object):
 class HMMAligner(object):
     def __init__(self, hmm_file, lex_file):
         self.lex_probs = LexTrans(lex_file)
-        self.read_hmm(hmm_file)
+        self.transition_probs = defaultdict(dict)
+        if hmm_file is not None:
+            self.read_hmm(hmm_file)
 
     def read_hmm(self, f):
         # read a file that look like this
         # 3 -2:182.773; -1:1106.93; 0:664.036; 1:44.329; 2:26.9507;
-        self.transition_probs = defaultdict(dict)
         for linenr, line in enumerate(f):
             line = line.rstrip().replace(';','').split()
             tgt_len = int(line[0])
@@ -90,6 +91,16 @@ class HMMAligner(object):
                         Q[j][i] = None      # mark aligned words possible
         return Q
 
+    def get_jumpprob(self, I, jump):
+        """ return probability of jump
+
+            assuming a jump distribution based on sentence length
+            if no data is available all jumps have equal probability (1.0)
+        """
+        if not I in self.transition_probs:
+            return 1.0
+        return self.transition_probs[I].get(jump, 0.0)
+
 
     def viterbi(self, src, tgt, pnull, phrase_alignment):
         I = len(src)
@@ -97,7 +108,7 @@ class HMMAligner(object):
         Q = [[None]*I*2 for s in tgt]
         if phrase_alignment:
             Q = self.init_q(J, I, phrase_alignment)
-        jump_probs = self.transition_probs[I]
+        #jump_probs = self.transition_probs[I]
         for j in range(J):
             w_t = tgt[j]
             for i in range(2*I):  # a_j
@@ -125,7 +136,8 @@ class HMMAligner(object):
                                 jump = i-k
                             else:
                                 jump = i-k+I
-                            jump_prob = jump_probs.get(-jump, 0.)
+                            #jump_prob = jump_probs.get(-jump, 0.)
+                            jump_prob = self.get_jumpprob(I, -jump)
                         else: # align to nullword
                             if k==i or k == i-I:
                                 jump_prob = pnull
@@ -172,6 +184,8 @@ class HMMAligner(object):
         return alignment
 
 def smart_open(filename):
+    if not filename:
+        return None
     if filename.endswith('.gz'):
         return io.BufferedReader(gzip.open(filename))
     return open(filename)
