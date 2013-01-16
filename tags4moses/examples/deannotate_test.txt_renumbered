@@ -1,5 +1,11 @@
-<passthrough tag="1#&lt;b_1 id=&quot;4&quot;&gt;#0||2#&lt;b_1 id=&quot;4&quot;&gt;#0||2#&lt;i_2&gt;#0||4#&lt;dot_3&gt;#0" src="Also nested tags work ."/>Also |0| nested |1| tags |2| work |3| . |4|
 <passthrough tag="" src="Line with no tag ."/>Line |0| with |1| no |2| tag |3| . |4|
+<passthrough tag="2#&lt;i_2&gt;#0||3#&lt;i_2&gt;#0" src="Line with no tag ."/>Line |0| with |1| no |-2| tag |-3| . |4|
+<passthrough tag="2#&lt;i_2&gt;#0||4#&lt;i_2&gt;#0" src="Line with no tag ."/>Line |0| with |-1| no |2| tag |3| . |4|
+<passthrough tag="2#&lt;i_2&gt;#1||4#&lt;i_2&gt;#0" src="Line with no tag ."/>Line |0| with |-1| no |2| tag |3| . |4|
+<passthrough tag="2#&lt;i_2&gt;#2||4#&lt;i_2&gt;#0" src="Line with no tag ."/>Line |0| with |-1| no |2| tag |3| . |4|
+<passthrough tag="2#&lt;i_2&gt;#3||4#&lt;i_2&gt;#0" src="Line with no tag ."/>Line |0| with |-1| no |2| tag |3| . |4|
+<passthrough tag="2#&lt;i_2&gt;#4||4#&lt;i_2&gt;#0" src="Line with no tag ."/>Line |0| with |-1| no |2| tag |3| . |4|
+<passthrough tag="1#&lt;b_1 id=&quot;4&quot;&gt;#0||2#&lt;b_1 id=&quot;4&quot;&gt;#0||2#&lt;i_2&gt;#0||4#&lt;dot_3&gt;#0" src="Also nested tags work ."/>Also |0| nested |1| tags |2| work |3| . |4|
 <passthrough tag="3#&lt;b_1&gt;#0||4#&lt;b_1&gt;#0||5#&lt;b_1&gt;#0" src="Keep escaped markup &amp; lt ;"/>Keep |0| escaped |1| markup |2| &amp; |3| lt |4| ; |5|
 <passthrough tag="0#&lt;img_1 alt=&quot;a beautiful image&quot;&gt;#1" src=""/>
 <passthrough tag="0#&lt;BIG_1&gt;#2||0#&lt;BIG_1&gt;#0||0#&lt;BIG_2&gt;#0||1#&lt;BIG_1&gt;#0||1#&lt;BIG_2&gt;#0||2#&lt;BIG_1&gt;#0||2#&lt;BIG_2&gt;#0" src="double cased markup"/>double |0| cased |1| markup |2|
