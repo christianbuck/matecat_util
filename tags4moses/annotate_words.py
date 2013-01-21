@@ -29,7 +29,7 @@ def parse_line(line):
 
 if __name__ == "__main__":
     sys.stdout = codecs.getwriter('utf-8')(sys.stdout)
-    sys.stdin = codecs.getreader('utf-8')(sys.stdin)
+    #sys.stdin = codecs.getreader('utf-8')(sys.stdin)
 
     import argparse
     parser = argparse.ArgumentParser()
@@ -39,7 +39,7 @@ if __name__ == "__main__":
     args = parser.parse_args(sys.argv[1:])
 
     for line in iter(sys.stdin.readline, ''):
-        #line = line.decode('utf-8')
+        line = line.decode('utf-8')
         line = line.strip()
         words = []
         annotated_words = []

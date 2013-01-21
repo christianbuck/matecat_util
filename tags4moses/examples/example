@@ -9,4 +9,5 @@ Quotes<tag id='double"quote"' id2="single'quote">work</tag>.
 Empty text: <text></text>.
 <!-- Comment-->
 Each<tag/>is<treated/>as<a/>space<by/>the<tokenizer/>.
+A line with Unicode: ಠ_ಠ
 <a help="empty element"/>3>2 & 4>3.
