@@ -82,7 +82,7 @@ class IBM1Aligner(object):
 
     def align(self, src, tgt, phrase_alignment=None):
         Q = self.update(src, tgt, phrase_alignment)
-	self.__printQ(Q,True)
+#	self.__printQ(Q,True)
         a = self.best_alignment(Q)
         a.reverse()
         return a
