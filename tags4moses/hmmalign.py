@@ -84,6 +84,7 @@ class HMMAligner(object):
                 if len(src_idx) == 0: # unaligned
                     for i in range(I):
                         Q[j][i] = (0.,-1)
+                        Q[j][i+I] = (1.,-1)
                 else:
                     for i in range(I):
                         Q[j][i] = (0.,-1) # mark all words impossible
@@ -132,14 +133,11 @@ class HMMAligner(object):
                     for k in range(2*I): # a_{j-1}
                         jump_prob = 0.0
                         if i < I:
-                            if k < I:
-                                jump = i-k
-                            else:
-                                jump = i-k+I
-                            #jump_prob = jump_probs.get(-jump, 0.)
+                            jump = i - (k%I)
                             jump_prob = self.get_jumpprob(I, -jump)
+                            #print 'jump, jumpprob', jump, jump_prob
                         else: # align to nullword
-                            if k==i or k == i-I:
+                            if k%I == i:
                                 jump_prob = pnull
                         prev_prob = Q[j-1][k][0]
                         if q_max > 0:
@@ -148,7 +146,7 @@ class HMMAligner(object):
                         if best == None or best[1] < prob:
                             best = (k, prob)
                     Q[j][i] = (best[1]*lex_prob, best[0])
-        #self.__printQ(Q, transpose=True)
+        # self.__printQ(Q, transpose=True)
         return Q
 
     def __printQ(self, Q, transpose=False):
@@ -200,6 +198,7 @@ if __name__ == "__main__":
     parser.add_argument('-pnull', action='store', type=float, help="jump probability to/from NULL word (default: 0.4)", default=0.4)
     parser.add_argument('-lower', action='store_true', help='lowercase input')
     parser.add_argument('-verbose', action='store_true', help='more output')
+    parser.add_argument('-ignore_phrases', action='store_true', help='ignore alignment info from moses')
     args = parser.parse_args(sys.argv[1:])
 
     hmm = HMMAligner(smart_open(args.hmmfile), smart_open(args.lexprobs))
@@ -215,21 +214,23 @@ if __name__ == "__main__":
         src_txt, tgt_txt, align, tag, markup = parser.parse(line)
 
         if args.verbose:
-            sys.stderr.write("src: %s\ntgt: %s\nalign: %s\n" (src_txt, tgt_txt, str(align)))
+            sys.stderr.write("src: %s\ntgt: %s\nalign: %s\n" %(src_txt, tgt_txt, str(align)))
 
         src = src_voc.map_sentence(src_txt, args.lower)
         tgt = tgt_voc.map_sentence(tgt_txt, args.lower)
 
         if args.verbose:
-            sys.stderr.write("src: %s\ntgt: %s\n" (str(src), str(tgt)))
+            sys.stderr.write("src: %s\ntgt: %s\n" %(str(src), str(tgt)))
 
         # compute a target-to-source alignment:
         # each target word is aligned to none or one source words
+        if args.ignore_phrases:
+            align = None
         alignment = hmm.align(src, tgt, phrase_alignment=align)
         alignment = dict(alignment)
 
         if args.verbose:
-            sys.stderr.write("alignment: %s\n" (str(alignment)))
+            sys.stderr.write("alignment: %s\n" %(str(alignment)))
 
         sys.stdout.write(markup)
         for j, w in enumerate(tgt_txt.rstrip().split()):

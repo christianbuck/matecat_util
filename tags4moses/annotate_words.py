@@ -3,6 +3,7 @@
 import sys
 from xml.sax.saxutils import escape, unescape
 from resilientparser import ResilientParser
+import codecs
 
 def make_attrib(name, val):
     # change quotation character from " to ' if " appears within the value
@@ -27,6 +28,9 @@ def parse_line(line):
     yield (idx-1), token, annotation[idx]
 
 if __name__ == "__main__":
+    sys.stdout = codecs.getwriter('utf-8')(sys.stdout)
+    sys.stdin = codecs.getreader('utf-8')(sys.stdin)
+
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('-noescape', action='store_true', help='don\'t escape <,&,> and quotations')
@@ -35,6 +39,7 @@ if __name__ == "__main__":
     args = parser.parse_args(sys.argv[1:])
 
     for line in iter(sys.stdin.readline, ''):
+        #line = line.decode('utf-8')
         line = line.strip()
         words = []
         annotated_words = []
@@ -53,7 +58,8 @@ if __name__ == "__main__":
             annotated_words = escaped_annotated_words
 
         src = escape(" ".join(words), {"'":"&apos;", '"':"&quot;"})
-        src = src.encode('utf-8')
+
+        #src = src.decode('utf-8')
         if not args.sourceonly:
             if args.nosource:
                 sys.stdout.write("<passthrough tag=\"%s\"/>%s\n" %(annotated_words, src))
