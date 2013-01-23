@@ -42,8 +42,14 @@ while (my $line=<STDIN>){
 		my $tagbef=$1;
 		my $tagaft=$2;
 		my $word=$3;
-		my $spantag = "<notranslate ${tagbef}english=\"${word}\" pr=\"$forcescore\"${tagaft}${word}</notranslate>";
-		$line = $`.$spantag.$';
+		my $textbef = $`;
+		my $textaft = $';
+		my $trans = $word;
+		$trans =~ s/^\s*//;	
+		$trans =~ s/\s*$//;	
+		my $spantag = "<notranslate ${tagbef}target=\"${trans}\" pr=\"$forcescore\"${tagaft}${word}</notranslate>";
+		$spantag =~ s/\s+>/>/g;
+		$line = $textbef.$spantag.$textaft;
 	}
 	while ($line =~ /<span ([^>]*?)class=\"forcetranslate\" ([^>]*?)translation=\"([^\"]*)\"([^>]*?>)(.+?)<\/span>/){
                 my $tagbef=$1;
@@ -51,8 +57,11 @@ while (my $line=<STDIN>){
                 my $trans=$3;
                 my $tagaft=$4;
                 my $word=$5;
-		my $spantag = "<forcetranslate ${tagbef}english=\"${trans}\" pr=\"$forcescore\" ${tagmid}${tagaft}${word}</forcetranslate>";
-		$line = $`.$spantag.$';
+                my $textbef = $`;
+                my $textaft = $';
+		my $spantag = "<forcetranslate ${tagbef}target=\"${trans}\" pr=\"$forcescore\" ${tagmid}${tagaft}${word}</forcetranslate>";
+		$spantag =~ s/\s+>/>/g;
+		$line = $textbef.$spantag.$textaft;
 	}
 	print "$line\n";
 }

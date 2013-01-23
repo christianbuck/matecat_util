@@ -7,6 +7,8 @@ use constant CONTAINS_EMPTY_TEXT => 1;
 use constant SELF_CONTAINED => 2;
 use constant OPENED_BUT_UNCLOSED => 3;
 use constant CLOSED_BUT_UNOPENED => 4;
+use constant NOTRANSLATE => 5;
+use constant FORCETRANSLATE => 6;
 
 #use MateCat;
 use Getopt::Long;
@@ -35,6 +37,7 @@ my $optional_params = 5; # maximum number of optional free parameters
 sub Usage(){
 	warn "Usage: deannotate_words.pl [options] < input > output\n";
 	warn "	-help 	\tprint this help\n";
+	warn "  -b      \tdisable Perl buffering.\n";
 	warn "	-encoding=<type> 	\tinput and output encoding type\n";
 	warn "	-collapse 	\tenable collapsing of adjacent tags\n";
 	warn "	-escape 	\tescape \n";
@@ -79,7 +82,7 @@ while (my $line=<STDIN>){
 			$endxml{$idx} = "";	
 			$typexml{$idx} = "";	
 		}
-		if ($type == CONTAINS_NONEMPTY_TEXT ){
+		if ($type == CONTAINS_NONEMPTY_TEXT  || $type == NOTRANSLATE || $type == FORCETRANSLATE ){
                         $xml{$idx} .= "<$value>";
                         $endxml{$idx} = "</$mainvalue>$endxml{$idx}";
 			$typexml{$idx} = $type;	
@@ -96,7 +99,7 @@ while (my $line=<STDIN>){
                         $xml{$idx} .= "</$mainvalue>";
                         $typexml{$idx} = $type;
                 }else{
-                        die "Third field should have one of the following values: ",join(",",(CONTAINS_NONEMPTY_TEXT,CONTAINS_EMPTY_TEXT,SELF_CONTAINED,OPENED_BUT_UNCLOSED,CLOSED_BUT_UNOPENED)),"\n";
+                        die "Third field should have one of the following values: ",join(",",(CONTAINS_NONEMPTY_TEXT,CONTAINS_EMPTY_TEXT,SELF_CONTAINED,OPENED_BUT_UNCLOSED,CLOSED_BUT_UNOPENED,NOTRANSLATE,FORCETRANSLATE)),"\n";
                 }
 	}
 
@@ -105,21 +108,7 @@ while (my $line=<STDIN>){
         for (my $i=0; $i < scalar(@trgwords); $i+=2){
 		my $srcidx = $trgwords[$i+1];
 		if ($srcidx != -1 && defined($xml{$srcidx})){
-                        if ($typexml{$srcidx} == CONTAINS_NONEMPTY_TEXT){
-                            $out .= $xml{$srcidx}.$trgwords[$i].$endxml{$srcidx}." ";
-                        }elsif ($typexml{$srcidx} == CONTAINS_EMPTY_TEXT){
-                            $out .= $xml{$srcidx}.$trgwords[$i]." ";
-                        }elsif ($typexml{$srcidx} == SELF_CONTAINED){
-			    $out .= $xml{$srcidx}.$trgwords[$i]." ";
-			}elsif ($typexml{$srcidx} == OPENED_BUT_UNCLOSED){
-                            $out .= $xml{$srcidx}.$trgwords[$i]." ";
-                        }elsif ($typexml{$srcidx} == CLOSED_BUT_UNOPENED){
-                            $out .= $xml{$srcidx}.$trgwords[$i]." ";
-
-                        }else{
-                            die "Third field should have one of the following values: ",join(",",(CONTAINS_NONEMPTY_TEXT,CONTAINS_EMPTY_TEXT,SELF_CONTAINED,OPENED_BUT_UNCLOSED,CLOSED_BUT_UNOPENED)),"\n";
-				die "Third field should have one of the following values: 0, 1, 2\n";
- 			}
+                        $out .= $xml{$srcidx}.$trgwords[$i].$endxml{$srcidx}." ";
 		}else{
 			$out .= "$trgwords[$i] ";
 		}

@@ -21,10 +21,8 @@ def make_tag(tag, tag_id, attrib=None):
 def parse_line(line):
   parser = ResilientParser()
   annotation, tokens = parser.process(line)
-#  sys.stdout.write("line=|%s|\n" %(line))
   tokens.insert(0, None)
   for idx, token in enumerate(tokens):
-#    sys.stdout.write("idx=|%s| token=|%s| annotation[idx]=|%s|\n" %(idx,token,str(annotation[idx])))
     yield (idx-1), token, annotation[idx]
 
 if __name__ == "__main__":

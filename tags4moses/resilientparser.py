@@ -12,6 +12,8 @@ class TagTypes():
     # two additional types to handle broken markup:
     OPENED_BUT_UNCLOSED = 3        # ex: <a>
     CLOSED_BUT_UNOPENED = 4        # ex: </a>
+    NOTRANSLATE = 5                # ex: <span class="notranslate"...>xxx</span>
+    FORCETRANSLATE = 6             # ex: <span class="forcetranslate"...>xxx</span>
 
 class ResilientParser(HTMLParser):
     def __init__(self):
@@ -33,23 +35,44 @@ class ResilientParser(HTMLParser):
         assert self.first_pass
         for t,a,i in self.stack:
             self.tag_types[i] = (t, TagTypes.OPENED_BUT_UNCLOSED)
+
         self.tag_idx = 0
         self.stack = []
         assert not self.annotated_data
         assert self.token_idx == 0
         self.first_pass = False
 
+    def fix_annotation(self):
+	re_attr = re.compile('(class)')
+	re_value = re.compile('(notranslate)')
+        for idx, token in enumerate(self.tokens):
+	    ann_data = self.annotated_data[idx+1]
+	    new_ann_data = []
+            for tag in ann_data:
+		name = tag[0]
+		attrs = tag[1]
+		tag_idx = tag[2]
+		type = tag[3]
+                for attr in attrs:
+		    if name == "span" and attr[0] == "class":
+			if attr[1] == "notranslate":
+                            type = TagTypes.NOTRANSLATE
+		        elif attr[1] == "forcetranslate":
+                            type = TagTypes.FORCETRANSLATE
+		new_ann_data.append( (name, attrs, tag_idx, type) )
+            self.annotated_data[idx+1] = new_ann_data	
+
     def process(self, line):
         self.reset()
         self.feed(line)
-        #sys.stderr.write("starting second pass. tag_types: %s\n" %(self.tag_types))
         self.start_second_pass()
         self.feed(line)
         assert not self.stack
+        self.fix_annotation()
         return self.annotated_data, self.tokens
 
     def get_cased_start_tag(self, expected_tag=None):
-        re_tag = re.compile('<(?P<tag_name>[^/\s]+)[^>]*>')
+	re_tag = re.compile('<(?P<tag_name>[^/\s]+)[^>]*>')
         text = self.get_starttag_text()
         if not text:
             assert not expected_tag
@@ -140,16 +163,18 @@ class ResilientParser(HTMLParser):
                 assert self.tag_types[i][0] == tag
                 assert self.tag_types[i][1] in [TagTypes.CONTAINS_EMPTY_TEXT,
                                              TagTypes.CONTAINS_NONEMPTY_TEXT]
-        else:
+	else:
             # in second pass opened to unclosed tags are not pushed to the stack
-            # thus we either have the closed-but-upopened case or the standard
+            # thus we either have the closed-but-unopened case or the standard
             # case of correct markup
-            if not self.stack or self.stack[-1][0] != tag:
+
+	    if not self.stack or self.stack[-1][0] != tag:
+                cased_tag = tag
                 self.tag_idx += 1
-                cased_tag = self.get_cased_start_tag(tag)
-                assert cased_tag != None
-                self.annotated_data[self.token_idx].append(
-                    (cased_tag, {}, self.tag_idx, TagTypes.CLOSED_BUT_UNOPENED))
+                if self.tag_types[self.tag_idx][1] == TagTypes.CLOSED_BUT_UNOPENED:
+                    self.annotated_data[len(self.tokens)].append(
+                        (cased_tag, {}, self.tag_idx, TagTypes.CLOSED_BUT_UNOPENED) )
+
             else:
                 assert self.stack
                 assert self.stack[-1][0] == tag
