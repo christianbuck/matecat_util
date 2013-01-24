@@ -20,11 +20,13 @@ my $enc = UTF8;
 my $collapse = 0;
 my $escape = 0;
 my $bflag = 0;
+my $printpassthrough = 0;
 
 # parameter definition
 GetOptions(
   "help" => \$help,
   "b" => \$bflag,
+  "p" => \$printpassthrough,
   "encoding=s" => \$enc,
   "collapse" => \$collapse,
   "escape" => \$escape,
@@ -38,6 +40,7 @@ sub Usage(){
 	warn "Usage: deannotate_words.pl [options] < input > output\n";
 	warn "	-help 	\tprint this help\n";
 	warn "  -b      \tdisable Perl buffering.\n";
+	warn "  -p      \tprint passthrough xml tag\n";
 	warn "	-encoding=<type> 	\tinput and output encoding type\n";
 	warn "	-collapse 	\tenable collapsing of adjacent tags\n";
 	warn "	-escape 	\tescape \n";
@@ -71,8 +74,8 @@ while (my $line=<STDIN>){
 	my %endxml = ();
 	my %typexml = ();
 	for (my $i=0; $i < scalar(@tags); $i++){
-		my ($idx,$value,$type) = ($tags[$i] =~ /(\d+)\#(.*?)\#(\d+)$/);
-
+		my ($idx,$value,$type) = ($tags[$i] =~ /(\-?\d+)\#(.*?)\#(\d+)$/);
+		
 		$value =~ s/\&lt;(.+?)&gt;/$1/;
 		$value =~ /^([^ \t]*)([ \t].+)?$/;
 		my $mainvalue = $1;
@@ -105,6 +108,15 @@ while (my $line=<STDIN>){
 
 #reconctructing the tagged output
 	my $out ="";
+
+	#adding tags not associated to any source word
+        for (my $i=0; $i < scalar(@tags); $i++){
+        	my ($idx,$value,$type) = ($tags[$i] =~ /(\-?\d+)\#(.*?)\#(\d+)$/);
+		if ($idx == -1 && defined($xml{$idx})){
+                        $out = $xml{$idx}.$endxml{$idx}." ";
+		}
+	}
+
         for (my $i=0; $i < scalar(@trgwords); $i+=2){
 		my $srcidx = $trgwords[$i+1];
 		if ($srcidx != -1 && defined($xml{$srcidx})){
@@ -160,5 +172,6 @@ while (my $line=<STDIN>){
         $out =~ s/^[ \t]//g;
         $out =~ s/[ \t]$//g;
         $out =~ s/>[ ]+</></g;
+	if ($printpassthrough){ print "$passthrough"; }
 	print "$out\n";
 }
