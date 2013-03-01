@@ -50,7 +50,7 @@ class Filter(object):
     def __remove_newlines(self, s):
         s = s.replace('\r\n',' ')
         s = s.replace('\n',' ')
-        return s
+        return s       
 
     def __collapse_spaces(self, s):
         return re.sub('\s\s+', ' ', s)
@@ -148,7 +148,8 @@ class Root(object):
 
     def __init__(self, queue, prepro_cmd=None, postpro_cmd=None, slang=None,
                  tlang=None, pretty=False, persistent_processes=False,
-                 timeout=-1):
+                 verbose=0,
+		 timeout=-1):
         self.filter = Filter(remove_newlines=True, collapse_spaces=True)
         self.queue = queue
         self.prepro_cmd = []
@@ -165,6 +166,7 @@ class Root(object):
         self.persist = bool(persistent_processes)
         self.pretty = bool(pretty)
         self.timeout = timeout
+        self.verbose = verbose
 
     def _check_params(self, params):
         errors = []
@@ -204,7 +206,6 @@ class Root(object):
         proc.stdin.write(u_string.encode("utf-8"))
         proc.stdin.flush()
         return proc.stdout.readline().decode("utf-8").rstrip()
-        #self.log("done.")
 
     def _prepro(self, query):
         if not self.persist or not hasattr(cherrypy.thread_data, 'prepro'):
@@ -224,10 +225,38 @@ class Root(object):
             query = self._pipe(proc, query)
         return query
 
+    def _getOnlyTranslation(self, query):
+        re_align = re.compile(r'<passthrough[^>]*\/>')
+	query = re_align.sub('',query)
+	return query
+
+    def _getAlignment(self, query, tagname):
+        pattern = "<passthrough[^>]*"+tagname+"=\"(?P<align>[^\"]*)\"\/>"
+        re_align = re.compile(pattern)
+        m = re_align.search(query)
+        if not m:
+            return query, None
+
+        query = re_align.sub('',query)
+        alignment = m.group('align')
+        alignment = re.sub(' ','',alignment)
+        data = self._load_json('{"align": %s}' % alignment)
+
+        return query, data["align"]
+
+    def _getPhraseAlignment(self, query):
+        return self._getAlignment(query, 'phrase_alignment')
+   
+    def _getWordAlignment(self, query):
+        return self._getAlignment(query, 'word_alignment')
+
     def _dump_json(self, data):
         if self.pretty:
             return json.dumps(data, indent=2) + "\n"
         return json.dumps(data) + "\n"
+
+    def _load_json(self, string):
+        return json.loads(string)
 
     @cherrypy.expose
     def translate(self, **kwargs):
@@ -238,9 +267,12 @@ class Root(object):
         if errors:
             cherrypy.response.status = 400
             return self._dump_json(errors)
-        self.log("Request before preprocessing: %s" %repr(kwargs["q"]))
+        self.log("The server is working on: %s" %repr(kwargs["q"]))
+	if self.verbose > 0:
+            self.log("Request before preprocessing: %s" %repr(kwargs["q"]))
         q = self._prepro(self.filter.filter(kwargs["q"]))
-        self.log("Request after preprocessing: %s" %repr(q))
+        if self.verbose > 0:
+            self.log("Request after preprocessing: %s" %repr(q))
         translation = ""
         if q.strip():
             result_queue = Queue.Queue()
@@ -253,10 +285,36 @@ class Root(object):
             except Queue.Empty:
                 return self._timeout_error(q, 'translation')
 
-        self.log("Translation before postprocessing: %s" %translation)
+        if self.verbose > 0:
+            self.log("Translation before postprocessing: %s" %translation)
         translation = self._postpro(translation)
-        self.log("Translation after postprocessing: %s" %translation)
-        data = {"data" : {"translations" : [{"translatedText":translation}]}}
+        if self.verbose > 0:
+            self.log("Translation after postprocessing: %s" %translation)
+    
+	translation, phraseAlignment = self._getPhraseAlignment(translation)
+        if self.verbose > 1:
+            self.log("Phrase alignment: %s" %str(phraseAlignment))
+            self.log("Translation after removing phrase-alignment: %s" %translation)
+
+        translation, wordAlignment = self._getWordAlignment(translation)
+        if self.verbose > 1:
+            self.log("Word alignment: %s" %str(wordAlignment))
+            self.log("Translation after removing word-alignment: %s" %translation)
+
+        translation = self._getOnlyTranslation(translation)
+        if self.verbose > 1:
+            self.log("Translation after removing additional info: %s" %translation)
+
+	translationDict = {}
+	if translation:
+		translationDict["translatedText"] = translation
+	if phraseAlignment:
+		translationDict["phraseAlignment"] = phraseAlignment
+	if wordAlignment:
+		translationDict["wordAlignment"] = wordAlignment
+        data = {"data" : {"translations" : [translationDict]}}
+##        data = {"data" : {"translations" : [{"translatedText":translation, "phraseAlignment":phraseAlignmentString, "wordAlignment":wordAlignmentString}]}}
+        self.log("The server is returning: %s" %self._dump_json(data))
         return self._dump_json(data)
 
     def log(self, message):
@@ -279,6 +337,7 @@ if __name__ == "__main__":
     #parser.add_argument('-log', choices=['DEBUG', 'INFO'], help='logging level, default:DEBUG', default='DEBUG')
     parser.add_argument('-logprefix', help='logfile prefix, default: write to stderr')
     parser.add_argument('-timeout', help='timeout for call to translation engine, default: unlimited', type=int)
+    parser.add_argument('-verbose', help='verbosity level, default: 0', type=int, default=0)
     # persistent threads
     thread_options = parser.add_mutually_exclusive_group()
     thread_options.add_argument('-persist', action='store_true', help='keep pre/postprocessing scripts running')
@@ -305,6 +364,7 @@ if __name__ == "__main__":
                              prepro_cmd = args.prepro, postpro_cmd = args.postpro,
                              slang = args.slang, tlang = args.tlang,
                              pretty = args.pretty,
+                             verbose = args.verbose,
                              persistent_processes = persistent_processes))
 
     moses.close()
