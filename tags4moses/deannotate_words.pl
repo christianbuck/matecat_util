@@ -58,7 +58,14 @@ if ($bflag){ $| = 1; }
 
 while (my $line=<STDIN>){
 	chomp($line);
-	my ($passthrough,$trans) = ($line =~ /(^<passthrough[^>]*\/>)(.*)$/);
+	my $passthrough = "";
+	my $trans = "";
+
+	while ($line =~ /^<passthrough[^>]*\/>/){
+		$line =~ s/(^<passthrough[^>]*\/>)\s*(.*)$/$2/;
+		$passthrough .= "$1";
+	}
+	$trans = "$line";
 
 #parsing translation
 	my @trgwords = split (/[ \t]+/, $trans);

@@ -2,6 +2,7 @@
 
 import sys
 import gzip, io
+import re
 from collections import defaultdict
 from itertools import imap
 
@@ -183,11 +184,11 @@ def smart_open(filename):
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
-##    parser.add_argument('sourcevoc', action='store', help="source vocabulary")
-##    parser.add_argument('targetvoc', action='store', help="target vocabulary")
     parser.add_argument('s2tlex', action='store', help="source-target lexicon")
     parser.add_argument('t2slex', action='store', help="target-source lexicon")
     parser.add_argument('-lower', action='store_true', help='lowercase input')
+    parser.add_argument('-printXmlWordAlignment', action='store_true', help='print word alignment in passthough xml tag')
+    parser.add_argument('-printXmlPhraseAlignment', action='store_true', help='print phrase alignment in passthough xml tag')
     parser.add_argument('-verbose', action='store_true', help='more output')
     args = parser.parse_args(sys.argv[1:])
 
@@ -203,29 +204,42 @@ if __name__ == "__main__":
             continue
         src_txt, tgt_txt, align, tag, markup = parser.parse(line)
 
-        if args.verbose:
+        if args.printXmlPhraseAlignment or args.printXmlAlignment:
 	    phrasealignmentstr = ""
 	    for i in range(len(align)):
-		phrasealignmentstr = "%s %s-%s" %(phrasealignmentstr,str(align[i][0]),str(align[i][1]))
-	    phrasealignmentstr = "src: %s\ntgt: %s\nphrase-alignment: %s\n" % (src_txt, tgt_txt, phrasealignmentstr)
-            sys.stderr.write(phrasealignmentstr)
+		if i > 0:
+		    phrasealignmentstr = "%s , " %(phrasealignmentstr)
+		phrasealignmentstr = "%s[ %s , %s ]" %(phrasealignmentstr,str(align[i][0]),str(align[i][1]))
+	    phrasealignmentstr = re.sub(' ','',phrasealignmentstr)
         src = src_voc.map_sentence(src_txt, args.lower)
         tgt = tgt_voc.map_sentence(tgt_txt, args.lower)
-#        sys.stdout.write("\nSRC TXT:%s\n and VOC:%s\n" %(src_txt,src))
-#        sys.stdout.write("\nTGT TXT:%s\n and VOC:%s\n" %(tgt_txt,tgt))
+        if args.verbose:
+            sys.stderr.write("\nsrc: %s\ntgt: %s\nphrasealignmentstr: %s\n" % (src_txt, tgt_txt, phrasealignmentstr))
 
         # compute a target-to-source alignment:
         # each target word is aligned to none or one source words
         alignment = IBM1.align(src, tgt, phrase_alignment=align)
         alignment = dict(alignment)
 
-        if args.verbose:
+        if args.printXmlWordAlignment or args.printXmlAlignment:
 	    wordalignmentstr = ""
             for i in range(len(alignment)):
 		if alignment[i] != -1:
-                    wordalignmentstr = "%s %d-%d" %(wordalignmentstr,alignment[i],i)
-            wordalignmentstr = "src: %s\ntgt: %s\nword-alignment: %s\n" % (src_txt, tgt_txt, wordalignmentstr)
-            sys.stderr.write(wordalignmentstr)
+                    if wordalignmentstr:
+                        wordalignmentstr = "%s , " %(wordalignmentstr)
+                    wordalignmentstr = "%s[ [%d] , [%d] ]" %(wordalignmentstr,alignment[i],i)
+	    wordalignmentstr = re.sub(' ','',wordalignmentstr)
+        if args.verbose:
+            sys.stderr.write("\nsrc: %s\ntgt: %s\nwordalignmentstr: %s\n" % (src_txt, tgt_txt, wordalignmentstr))
+
+### add phrase and/or word-alignment to markup string
+        if args.printXmlWordAlignment and args.printXmlPhraseAlignment:
+	    markup = "%s<passthrough phrase_alignment=\"[%s]\"/>" % (markup, phrasealignmentstr)
+	    markup = "%s<passthrough word_alignment=\"[%s]\"/>" % (markup, wordalignmentstr)
+        elif args.printXmlPhraseAlignment:
+	    markup = "%s<passthrough phrase_alignment=\"[%s]\"/>" % (markup, phrasealignmentstr)
+        elif args.printXmlWordAlignment:
+	    markup = "%s<passthrough word_alignment=\"[%s]\"/>" % (markup, wordalignmentstr)
 
         sys.stdout.write(markup)
         for j, w in enumerate(tgt_txt.rstrip().split()):
