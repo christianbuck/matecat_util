@@ -148,8 +148,7 @@ class Root(object):
 
     def __init__(self, queue, prepro_cmd=None, postpro_cmd=None, slang=None,
                  tlang=None, pretty=False, persistent_processes=False,
-                 verbose=0,
-		 timeout=-1):
+                 verbose=0, timeout=-1):
         self.filter = Filter(remove_newlines=True, collapse_spaces=True)
         self.queue = queue
         self.prepro_cmd = []
@@ -227,8 +226,8 @@ class Root(object):
 
     def _getOnlyTranslation(self, query):
         re_align = re.compile(r'<passthrough[^>]*\/>')
-	query = re_align.sub('',query)
-	return query
+        query = re_align.sub('',query)
+        return query
 
     def _getAlignment(self, query, tagname):
         pattern = "<passthrough[^>]*"+tagname+"=\"(?P<align>[^\"]*)\"\/>"
@@ -268,7 +267,7 @@ class Root(object):
             cherrypy.response.status = 400
             return self._dump_json(errors)
         self.log("The server is working on: %s" %repr(kwargs["q"]))
-	if self.verbose > 0:
+        if self.verbose > 0:
             self.log("Request before preprocessing: %s" %repr(kwargs["q"]))
         q = self._prepro(self.filter.filter(kwargs["q"]))
         if self.verbose > 0:
@@ -291,7 +290,7 @@ class Root(object):
         if self.verbose > 0:
             self.log("Translation after postprocessing: %s" %translation)
     
-	translation, phraseAlignment = self._getPhraseAlignment(translation)
+        translation, phraseAlignment = self._getPhraseAlignment(translation)
         if self.verbose > 1:
             self.log("Phrase alignment: %s" %str(phraseAlignment))
             self.log("Translation after removing phrase-alignment: %s" %translation)
@@ -305,13 +304,13 @@ class Root(object):
         if self.verbose > 1:
             self.log("Translation after removing additional info: %s" %translation)
 
-	translationDict = {}
-	if translation:
-		translationDict["translatedText"] = translation
-	if phraseAlignment:
-		translationDict["phraseAlignment"] = phraseAlignment
-	if wordAlignment:
-		translationDict["wordAlignment"] = wordAlignment
+        translationDict = {}
+        if translation:
+            translationDict["translatedText"] = translation
+        if phraseAlignment:
+            translationDict["phraseAlignment"] = phraseAlignment
+        if wordAlignment:
+            translationDict["wordAlignment"] = wordAlignment
         data = {"data" : {"translations" : [translationDict]}}
 ##        data = {"data" : {"translations" : [{"translatedText":translation, "phraseAlignment":phraseAlignmentString, "wordAlignment":wordAlignmentString}]}}
         self.log("The server is returning: %s" %self._dump_json(data))
