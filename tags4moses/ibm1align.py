@@ -31,20 +31,20 @@ class IBM1Aligner(object):
         s_last_idx = 0
         t_last_idx = 0
         for tword, sword, pr in imap(str.split, s2tf):
-	    s_exists = sword in s_voc
-	    t_exists = tword in t_voc
+            s_exists = sword in s_voc
+            t_exists = tword in t_voc
             if s_exists == False :
                 s_voc[sword] = s_last_idx
                 s_inv_voc[s_last_idx] = sword
-		s2t_model.append({})
-		s_last_idx = s_last_idx + 1
+                s2t_model.append({})
+                s_last_idx = s_last_idx + 1
             sidx = s_voc[sword]
 
             if t_exists == False :
-	        t_voc[tword] = t_last_idx
+                t_voc[tword] = t_last_idx
                 t_inv_voc[t_last_idx] = tword
-		t2s_model.append({})
-		t_last_idx = t_last_idx + 1
+                t2s_model.append({})
+                t_last_idx = t_last_idx + 1
             tidx = t_voc[tword]
 
             s2t_model[sidx][tidx] = float(pr)
@@ -56,14 +56,14 @@ class IBM1Aligner(object):
             if t_exists == False :
                 t_voc[tword] = t_last_idx
                 t_inv_voc[t_last_idx] = tword
-		t2s_model.append({})
-		t_last_idx = t_last_idx + 1
+                t2s_model.append({})
+                t_last_idx = t_last_idx + 1
             tidx = t_voc[tword]
 
             if s_exists == False :
                 s_voc[sword] = s_last_idx
                 s_inv_voc[s_last_idx] = sword
-		s_lastidx = s_last_idx + 1
+                s_lastidx = s_last_idx + 1
             sidx = s_voc[sword]
  
             t2s_model[tidx][sidx] = float(pr)
@@ -83,7 +83,7 @@ class IBM1Aligner(object):
 
     def align(self, src, tgt, phrase_alignment=None):
         Q = self.update(src, tgt, phrase_alignment)
-#	self.__printQ(Q,True)
+#        self.__printQ(Q,True)
         a = self.best_alignment(Q)
         a.reverse()
         return a
@@ -134,7 +134,7 @@ class IBM1Aligner(object):
                 w_s = 0
                 if i < I:
                     w_s = src[i]
-		else:
+                else:
                     w_s = self.s_voc['NULL']
 
                 lex_prob = self.s2t_score(w_s, w_t)
@@ -167,8 +167,8 @@ class IBM1Aligner(object):
                     best = Q[j][i];
                     best_idx = i
 
-	    if best_idx == I:
-	        best_idx = -1
+            if best_idx == I:
+                best_idx = -1
             if verbose:
                 print j, best_idx, "->", Q[j][best_idx]
             a_j = best_idx
@@ -205,12 +205,12 @@ if __name__ == "__main__":
         src_txt, tgt_txt, align, tag, markup = parser.parse(line)
 
         if args.printXmlPhraseAlignment or args.printXmlAlignment:
-	    phrasealignmentstr = ""
-	    for i in range(len(align)):
-		if i > 0:
-		    phrasealignmentstr = "%s , " %(phrasealignmentstr)
-		phrasealignmentstr = "%s[ %s , %s ]" %(phrasealignmentstr,str(align[i][0]),str(align[i][1]))
-	    phrasealignmentstr = re.sub(' ','',phrasealignmentstr)
+            phrasealignmentstr = ""
+            for i in range(len(align)):
+                if i > 0:
+                    phrasealignmentstr = "%s , " %(phrasealignmentstr)
+                phrasealignmentstr = "%s[ %s , %s ]" %(phrasealignmentstr,str(align[i][0]),str(align[i][1]))
+            phrasealignmentstr = re.sub(' ','',phrasealignmentstr)
         src = src_voc.map_sentence(src_txt, args.lower)
         tgt = tgt_voc.map_sentence(tgt_txt, args.lower)
         if args.verbose:
@@ -222,24 +222,24 @@ if __name__ == "__main__":
         alignment = dict(alignment)
 
         if args.printXmlWordAlignment or args.printXmlAlignment:
-	    wordalignmentstr = ""
+            wordalignmentstr = ""
             for i in range(len(alignment)):
-		if alignment[i] != -1:
+                if alignment[i] != -1:
                     if wordalignmentstr:
                         wordalignmentstr = "%s , " %(wordalignmentstr)
                     wordalignmentstr = "%s[ [%d] , [%d] ]" %(wordalignmentstr,alignment[i],i)
-	    wordalignmentstr = re.sub(' ','',wordalignmentstr)
+            wordalignmentstr = re.sub(' ','',wordalignmentstr)
         if args.verbose:
             sys.stderr.write("\nsrc: %s\ntgt: %s\nwordalignmentstr: %s\n" % (src_txt, tgt_txt, wordalignmentstr))
 
 ### add phrase and/or word-alignment to markup string
         if args.printXmlWordAlignment and args.printXmlPhraseAlignment:
-	    markup = "%s<passthrough phrase_alignment=\"[%s]\"/>" % (markup, phrasealignmentstr)
-	    markup = "%s<passthrough word_alignment=\"[%s]\"/>" % (markup, wordalignmentstr)
+            markup = "%s<passthrough phrase_alignment=\"[%s]\"/>" % (markup, phrasealignmentstr)
+            markup = "%s<passthrough word_alignment=\"[%s]\"/>" % (markup, wordalignmentstr)
         elif args.printXmlPhraseAlignment:
-	    markup = "%s<passthrough phrase_alignment=\"[%s]\"/>" % (markup, phrasealignmentstr)
+            markup = "%s<passthrough phrase_alignment=\"[%s]\"/>" % (markup, phrasealignmentstr)
         elif args.printXmlWordAlignment:
-	    markup = "%s<passthrough word_alignment=\"[%s]\"/>" % (markup, wordalignmentstr)
+            markup = "%s<passthrough word_alignment=\"[%s]\"/>" % (markup, wordalignmentstr)
 
         sys.stdout.write(markup)
         for j, w in enumerate(tgt_txt.rstrip().split()):
@@ -250,21 +250,3 @@ if __name__ == "__main__":
         sys.stdout.flush()
 
     sys.exit()
-
-
-
-    tgt = "4908 2053 4443 72".split()     # Musharafs letzter Akt ?
-    src = "1580 12 5651 3533 75".split()  # Musharf 's last Act ?
-
-    src = map(int,"3308 6 767 2946 103 3 6552 1580 28 8938 468 12 1260 1294 7 1652 9 122 5 2183 4".split())
-    tgt = map(int,"7 30 10421 722 2 37 5 148 7020 2 38 7690 1943 9 638 5 2739 491 1085 6 9 10288 12029 4".split())
-
-    src = "desperate to hold onto power , Pervez Musharraf has discarded Pakistan &apos;s constitutional framework and declared a state of emergency ."
-    tgt = "in dem verzweifelten Versuch , an der Macht festzuhalten , hat Pervez Musharraf den Rahmen der pakistanischen Verfassung verlassen und den Notstand ausgerufen ."
-
-
-    sys.stdout.write("%s\n" %(src))
-    sys.stdout.write("%s\n" %(trg))
-    sys.stdout.flush()
-##    print src
-##    print tgt
