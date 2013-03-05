@@ -146,15 +146,16 @@ def json_error(status, message, traceback, version):
 class Root(object):
     required_params = ["q", "key", "target", "source"]
 
-    def __init__(self, queue, prepro_cmd=None, postpro_cmd=None, slang=None,
+    def __init__(self, queue, external_cmds=[None,None,None,None],
+                 postpro_cmd=None, slang=None,
                  tlang=None, pretty=False, persistent_processes=False,
                  verbose=0, timeout=-1):
         self.filter = Filter(remove_newlines=True, collapse_spaces=True)
         self.queue = queue
-        self.prepro_cmd = []
-        if prepro_cmd != None:
-            self.prepro_cmd = prepro_cmd
-        self.postpro_cmd = []
+
+        self.prepro_cmd, self.annotator_cmd, self.extractors_cmd, \
+            self.postpro_cmd  = [c if c != None else [] for c in external_cmds]
+
         if postpro_cmd != None:
             self.postpro_cmd = postpro_cmd
         self.expected_params = {}
@@ -204,23 +205,48 @@ class Root(object):
         u_string = u"%s\n" %s
         proc.stdin.write(u_string.encode("utf-8"))
         proc.stdin.flush()
+        # TODO: timeout
         return proc.stdout.readline().decode("utf-8").rstrip()
 
     def _prepro(self, query):
+        """ run preprocessing scripts such a tokenizers """
         if not self.persist or not hasattr(cherrypy.thread_data, 'prepro'):
-            if hasattr(cherrypy.thread_data, 'prepro'):
+            if not self.persist:
                 map(pclose, cherrypy.thread_data.prepro)
             cherrypy.thread_data.prepro = map(popen, self.prepro_cmd)
-        for proc, cmd in izip(cherrypy.thread_data.prepro, self.prepro_cmd):
+        for proc in cherrypy.thread_data.prepro:
+            query = self._pipe(proc, query)
+        return query
+
+    def _annotate(self, query):
+        """ annotate query with additional information that is also piped
+            into the decoder
+        """
+        if not self.persist or not hasattr(cherrypy.thread_data, 'annotators'):
+            if not self.persist:
+                map(pclose, cherrypy.thread_data.annotators)
+            cherrypy.thread_data.annotators = map(popen, self.annotator_cmd)
+        for proc in cherrypy.thread_data.annotators:
             query = self._pipe(proc, query)
         return query
 
     def _postpro(self, query):
+        """ run post-processing scripts such as detokenizers """
         if not self.persist or not hasattr(cherrypy.thread_data, 'postpro'):
-            if hasattr(cherrypy.thread_data, 'postpro'):
+            if not self.persist:
                 map(pclose, cherrypy.thread_data.postpro)
             cherrypy.thread_data.postpro = map(popen, self.postpro_cmd)
         for proc in cherrypy.thread_data.postpro:
+            query = self._pipe(proc, query)
+        return query
+
+    def _extract(self, query):
+        """ run information extractors """
+        if not self.persist or not hasattr(cherrypy.thread_data, 'extractors'):
+            if not self.persist:
+                map(pclose, cherrypy.thread_data.extractors)
+            cherrypy.thread_data.extractors = map(popen, self.extractors_cmd)
+        for proc in cherrypy.thread_data.extractors:
             query = self._pipe(proc, query)
         return query
 
@@ -266,12 +292,19 @@ class Root(object):
         if errors:
             cherrypy.response.status = 400
             return self._dump_json(errors)
+
         self.log("The server is working on: %s" %repr(kwargs["q"]))
         if self.verbose > 0:
             self.log("Request before preprocessing: %s" %repr(kwargs["q"]))
         q = self._prepro(self.filter.filter(kwargs["q"]))
         if self.verbose > 0:
             self.log("Request after preprocessing: %s" %repr(q))
+        if self.verbose > 0:
+            self.log("Request before annotation: %s" %repr(kwargs["q"]))
+        q = self._annotate(self.filter.filter(kwargs["q"]))
+        if self.verbose > 0:
+            self.log("Request after annotation: %s" %repr(q))
+
         translation = ""
         if q.strip():
             result_queue = Queue.Queue()
@@ -289,6 +322,12 @@ class Root(object):
         translation = self._postpro(translation)
         if self.verbose > 0:
             self.log("Translation after postprocessing: %s" %translation)
+
+        if self.verbose > 0:
+            self.log("Translation before extraction: %s" %translation)
+        translation = self._extract(translation)
+        if self.verbose > 0:
+            self.log("Translation after extraction: %s" %translation)
     
         translation, phraseAlignment = self._getPhraseAlignment(translation)
         if self.verbose > 1:
@@ -304,7 +343,7 @@ class Root(object):
         if self.verbose > 1:
             self.log("Translation after removing additional info: %s" %translation)
 
-        translationDict = {}
+        translationDict = {"sourceText":q.strip()}
         if translation:
             translationDict["translatedText"] = translation
         if phraseAlignment:
@@ -328,8 +367,12 @@ if __name__ == "__main__":
     parser.add_argument('-nthreads', help='number of server threads, default: 8', type=int, default=8)
     parser.add_argument('-moses', dest="moses_path", action='store', help='path to moses executable', default="/home/buck/src/mosesdecoder/moses-cmd/src/moses")
     parser.add_argument('-options', dest="moses_options", action='store', help='moses options, including .ini -async-output -print-id', default="-f phrase-model/moses.ini -v 0 -threads 2 -async-output -print-id")
-    parser.add_argument('-prepro', nargs="+", help='complete call to preprocessing script including arguments')
-    parser.add_argument('-postpro', nargs="+", help='complete call to postprocessing script including arguments')
+    parser.add_argument('-prepro', nargs="+", help='complete call to preprocessing script(s) including arguments')
+    parser.add_argument('-postpro', nargs="+", help='complete call to postprocessing script(s) including arguments')
+
+    parser.add_argument('-annotators', nargs="+", help='call to scripts run AFTER prepro, before translation')
+    parser.add_argument('-extractors', nargs="+", help='call to scripts run BEFORE postpro, after translation')
+
     parser.add_argument('-pretty', action='store_true', help='pretty print json')
     parser.add_argument('-slang', help='source language code')
     parser.add_argument('-tlang', help='target language code')
@@ -359,8 +402,9 @@ if __name__ == "__main__":
     if args.logprefix:
         cherrypy.config.update({'log.access_file': "%s.access.log" %args.logprefix,
                                 'log.error_file': "%s.error.log" %args.logprefix})
+    external_cmds = (args.prepro, args.annotators, args.extractors, args.postpro)
     cherrypy.quickstart(Root(moses.source_queue,
-                             prepro_cmd = args.prepro, postpro_cmd = args.postpro,
+                             external_cmds=external_cmds,
                              slang = args.slang, tlang = args.tlang,
                              pretty = args.pretty,
                              verbose = args.verbose,
