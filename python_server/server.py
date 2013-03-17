@@ -293,17 +293,15 @@ class Root(object):
             cherrypy.response.status = 400
             return self._dump_json(errors)
 
+        q = self.filter.filter(kwargs["q"])
         self.log("The server is working on: %s" %repr(kwargs["q"]))
-        if self.verbose > 0:
-            self.log("Request before preprocessing: %s" %repr(kwargs["q"]))
-        q = self._prepro(self.filter.filter(kwargs["q"]))
-        if self.verbose > 0:
-            self.log("Request after preprocessing: %s" %repr(q))
-        if self.verbose > 0:
-            self.log("Request before annotation: %s" %repr(kwargs["q"]))
+        self.log_info("Request before preprocessing: %s" %repr(kwargs["q"]))
+        translationDict = {"sourceText":q.strip()}
+        q = self._prepro(q)
+        self.log_info("Request after preprocessing: %s" %repr(q))
+        self.log_info("Request before annotation: %s" %repr(kwargs["q"]))
         q = self._annotate(self.filter.filter(kwargs["q"]))
-        if self.verbose > 0:
-            self.log("Request after annotation: %s" %repr(q))
+        self.log_info("Request after annotation: %s" %repr(q))
 
         translation = ""
         if q.strip():
@@ -317,33 +315,25 @@ class Root(object):
             except Queue.Empty:
                 return self._timeout_error(q, 'translation')
 
-        if self.verbose > 0:
-            self.log("Translation before postprocessing: %s" %translation)
-        translation = self._postpro(translation)
-        if self.verbose > 0:
-            self.log("Translation after postprocessing: %s" %translation)
-
-        if self.verbose > 0:
-            self.log("Translation before extraction: %s" %translation)
+        self.log_info("Translation before extraction: %s" %translation)
         translation = self._extract(translation)
-        if self.verbose > 0:
-            self.log("Translation after extraction: %s" %translation)
-    
+        self.log_info("Translation after extraction: %s" %translation)
+
         translation, phraseAlignment = self._getPhraseAlignment(translation)
-        if self.verbose > 1:
-            self.log("Phrase alignment: %s" %str(phraseAlignment))
-            self.log("Translation after removing phrase-alignment: %s" %translation)
+        self.log_info("Phrase alignment: %s" %str(phraseAlignment))
+        self.log_info("Translation after removing phrase-alignment: %s" %translation)
 
         translation, wordAlignment = self._getWordAlignment(translation)
-        if self.verbose > 1:
-            self.log("Word alignment: %s" %str(wordAlignment))
-            self.log("Translation after removing word-alignment: %s" %translation)
+        self.log_info("Word alignment: %s" %str(wordAlignment))
+        self.log_info("Translation after removing word-alignment: %s" %translation)
 
         translation = self._getOnlyTranslation(translation)
-        if self.verbose > 1:
-            self.log("Translation after removing additional info: %s" %translation)
+        self.log_info("Translation after removing additional info: %s" %translation)
 
-        translationDict = {"sourceText":q.strip()}
+        self.log_info("Translation before postprocessing: %s" %translation)
+        translation = self._postpro(translation)
+        self.log_info("Translation after postprocessing: %s" %translation)
+
         if translation:
             translationDict["translatedText"] = translation
         if phraseAlignment:
@@ -355,8 +345,12 @@ class Root(object):
         self.log("The server is returning: %s" %self._dump_json(data))
         return self._dump_json(data)
 
-    def log(self, message):
-        logger = logging.getLogger('translation_log')
+    def log_info(self, message):
+        if self.verbose > 0:
+            self.log(message, level=logging.INFO)
+
+    def log(self, message, level=logging.INFO):
+        logger = logging.getLogger('translation_log.info')
         logger.info(message)
 
 if __name__ == "__main__":
