@@ -299,7 +299,7 @@ class Root(object):
         translationDict = {"sourceText":q.strip()}
         q = self._prepro(q)
         self.log_info("Request after preprocessing: %s" %repr(q))
-        self.log_info("Request before annotation: %s" %repr(kwargs["q"]))
+        self.log_info("Request before annotation: %s" %repr(q))
         q = self._annotate(self.filter.filter(kwargs["q"]))
         self.log_info("Request after annotation: %s" %repr(q))
 
