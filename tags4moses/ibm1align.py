@@ -54,24 +54,46 @@ class IBM1Aligner(object):
         Q = self.update(src, tgt, phrase_alignment)
 #        self.__printQ(Q,True)
         a = self.best_alignment(Q)
-        #a.reverse()
         return a
 
     def init_q(self, J, I, alignment):
+        """ generate cost-matrix and mark impossible positions """
+        print "alignment:", alignment
         Q = [[None]*(I+1) for s in range(J)]
         for src_idx, tgt_idx in alignment:
             assert len(tgt_idx)>0
             for j in tgt_idx:
+                for i in range(I+1):
+                    Q[j][i] = 0 # mark all words impossible
                 if len(src_idx) == 0: # unaligned
-                    for i in range(I+1):
-                        Q[j][i] = 0
+                    Q[j][I] = None
                 else:
-                    for i in range(I):
-                        Q[j][i] = 0 # mark all words impossible
                     for i in src_idx:
                         Q[j][i] = None    # mark aligned words possible
-                    Q[j][I] = None # mark all words impossible
         return Q
+
+    def best_alignment(self, Q, verbose=False): # backtrace
+        """ just picking the best word for every target index """
+        J = len(Q)
+        I = len(Q[0]) - 1
+        alignment = []
+
+        for j in range(J):
+            best_idx = I
+            best = None
+            for i in range(I+1):
+                if best == None or Q[j][i] > best:
+                    best = Q[j][i];
+                    best_idx = i
+
+            if best_idx == I:
+                best_idx = -1 # aligned to NULL word means unaligned
+            if verbose:
+                sys.stderr.write("%s %s -> %s\n" %(j, best_idx, Q[j][best_idx]))
+            a_j = best_idx
+            alignment.append((j, a_j))
+
+        return alignment
 
     def _get_prob(self, probs, key1, key2, min_val=0.0):
         """ get value from a dict-of-dicts structure (probs).
@@ -98,29 +120,6 @@ class IBM1Aligner(object):
             for i in range(len(Q[0])):
                 for j in range(len(Q)):
                     print "Q(%s,%s)=%s" %(j,i,str(Q[j][i]))
-
-    def best_alignment(self, Q, verbose=False): # backtrace
-        """ just picking the best word for every target index """
-        J = len(Q)
-        I = len(Q[0]) - 1
-        alignment = []
-
-        for j in range(J):
-            best_idx = I
-            best = None
-            for i in range(I):
-                if best == None or Q[j][i] > best:
-                    best = Q[j][i];
-                    best_idx = i
-
-            if best_idx == I:
-                best_idx = -1 # aligned to NULL word means unaligned
-            if verbose:
-                sys.stderr.write("%s %s -> %s\n" %(j, best_idx, Q[j][best_idx]))
-            a_j = best_idx
-            alignment.append((j, a_j))
-
-        return alignment
 
 def smart_open(filename):
     if filename.endswith('.gz'):
