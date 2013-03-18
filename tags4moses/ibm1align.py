@@ -30,9 +30,15 @@ class IBM1Aligner(object):
         for sword, tword, pr in imap(str.split, t2sf):
             self.t2s_model[tword][sword] = float(pr)
 
-    def update(self, src, tgt, phrase_alignment):
+    def align(self, src, tgt, phrase_alignment=None):
         I = len(src)
         J = len(tgt)
+        Q = self.update(src, tgt, I, J, phrase_alignment)
+#        self.__printQ(Q,True)
+        a = self.best_alignment(Q, I, J)
+        return a
+
+    def update(self, src, tgt, I, J, phrase_alignment):
         Q = [[None]*(I+1) for s in tgt] # None means possible but unknown
                                         # I+1 to allow alignment to NULL word
         if phrase_alignment: # mark some positions impossible
@@ -50,15 +56,8 @@ class IBM1Aligner(object):
                 Q[j][i] = lex_prob
         return Q
 
-    def align(self, src, tgt, phrase_alignment=None):
-        Q = self.update(src, tgt, phrase_alignment)
-#        self.__printQ(Q,True)
-        a = self.best_alignment(Q)
-        return a
-
     def init_q(self, J, I, alignment):
         """ generate cost-matrix and mark impossible positions """
-        print "alignment:", alignment
         Q = [[None]*(I+1) for s in range(J)]
         for src_idx, tgt_idx in alignment:
             assert len(tgt_idx)>0
@@ -72,10 +71,8 @@ class IBM1Aligner(object):
                         Q[j][i] = None    # mark aligned words possible
         return Q
 
-    def best_alignment(self, Q, verbose=False): # backtrace
+    def best_alignment(self, Q, I, J, verbose=False): # backtrace
         """ just picking the best word for every target index """
-        J = len(Q)
-        I = len(Q[0]) - 1
         alignment = []
 
         for j in range(J):
