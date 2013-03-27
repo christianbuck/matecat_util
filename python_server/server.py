@@ -167,7 +167,7 @@ class ExternalProcessors(object):
     """ single object that does all the pre- and postprocessing """
 
     def _exec(self, procs):
-        def f(self, line):
+        def f(line):
             for proc in procs:
                 line = proc.process(line)
             return line
@@ -320,9 +320,41 @@ class Root(object):
     def _load_json(self, string):
         return json.loads(string)
 
+    def _process_externally(self, q, processor, name):
+        response = cherrypy.response
+        response.headers['Content-Type'] = 'application/json'
+        data = {"data" : {"translations" : [{name : processor(q)}]}}
+        return self._dump_json(data)
+
     @cherrypy.expose
     def tokenize(self, **kwargs):
-        pass
+        q = self.filter.filter(kwargs["q"])
+        return self._process_externally(q, self.external_processors.tokenize, 'tokenizedText')
+
+    @cherrypy.expose
+    def detokenize(self, **kwargs):
+        q = self.filter.filter(kwargs["q"])
+        return self._process_externally(q, self.external_processors.detokenize, 'detokenizedText')
+
+    @cherrypy.expose
+    def truecase(self, **kwargs):
+        q = self.filter.filter(kwargs["q"])
+        return self._process_externally(q, self.external_processors.truecase, 'truecasedText')
+
+    @cherrypy.expose
+    def detruecase(self, **kwargs):
+        q = self.filter.filter(kwargs["q"])
+        return self._process_externally(q, self.external_processors.detruecase, 'detruecasedText')
+
+    @cherrypy.expose
+    def prepro(self, **kwargs):
+        q = self.filter.filter(kwargs["q"])
+        return self._process_externally(q, self.external_processors.prepro, 'preprocessedText')
+
+    @cherrypy.expose
+    def postpro(self, **kwargs):
+        q = self.filter.filter(kwargs["q"])
+        return self._process_externally(q, self.external_processors.postpro, 'postprocessedText')
 
     @cherrypy.expose
     def translate(self, **kwargs):
@@ -405,17 +437,17 @@ if __name__ == "__main__":
     parser.add_argument('-ip', help='server ip to bind to, default: localhost', default="127.0.0.1")
     parser.add_argument('-port', action='store', help='server port to bind to, default: 8080', type=int, default=8080)
     parser.add_argument('-nthreads', help='number of server threads, default: 8', type=int, default=8)
-    parser.add_argument('-moses', dest="moses_path", action='store', help='path to moses executable', default="/home/buck/src/mosesdecoder/moses-cmd/src/moses")
-    parser.add_argument('-options', dest="moses_options", action='store', help='moses options, including .ini -async-output -print-id', default="-f phrase-model/moses.ini -v 0 -threads 2 -async-output -print-id")
+    parser.add_argument('-moses', dest="moses_path", action='store', help='path to moses executable', required=True)
+    parser.add_argument('-options', dest="moses_options", action='store', help='moses options, including .ini -async-output -print-id', required=True)
 
-    parser.add_argument('-tokenizer', nargs="+", help='call to tokenizer, including arguments, PREPROSTEP 1')
-    parser.add_argument('-truecaser', nargs="+", help='call to truecaser, including arguments, PREPROSTEP 2')
-    parser.add_argument('-prepro', nargs="+", help='complete call to preprocessing script(s) including arguments, PREPROSTEP(S) 3')
-    parser.add_argument('-annotators', nargs="+", help='call to scripts run AFTER prepro, before translation, PREPROSTEP(S) 4')
-    parser.add_argument('-extractors', nargs="+", help='call to scripts run BEFORE postpro, after translation')
-    parser.add_argument('-postpro', nargs="+", help='complete call to postprocessing script(s) including arguments, run before detruecaser')
-    parser.add_argument('-detruecaser', nargs='+', help='call to detruecaser, including arguments')
-    parser.add_argument('-detokenizer', nargs='+', help='call to detokenizer, including arguments')
+    parser.add_argument('-tokenizer', nargs="+", help='call to tokenizer, including arguments, PREPROSTEP 1', default=[])
+    parser.add_argument('-truecaser', nargs="+", help='call to truecaser, including arguments, PREPROSTEP 2', default=[])
+    parser.add_argument('-prepro', nargs="+", help='complete call to preprocessing script(s) including arguments, PREPROSTEP(S) 3', default=[])
+    parser.add_argument('-annotators', nargs="+", help='call to scripts run AFTER prepro, before translation, PREPROSTEP(S) 4', default=[])
+    parser.add_argument('-extractors', nargs="+", help='call to scripts run BEFORE postpro, after translation', default=[])
+    parser.add_argument('-postpro', nargs="+", help='complete call to postprocessing script(s) including arguments, run before detruecaser', default=[])
+    parser.add_argument('-detruecaser', nargs='+', help='call to detruecaser, including arguments', default=[])
+    parser.add_argument('-detokenizer', nargs='+', help='call to detokenizer, including arguments', default=[])
 
     parser.add_argument('-pretty', action='store_true', help='pretty print json')
     parser.add_argument('-slang', help='source language code')
@@ -436,10 +468,10 @@ if __name__ == "__main__":
         init_log("%s.trans.log" %args.logprefix)
 
     moses = MosesProc(" ".join((args.moses_path, args.moses_options)))
-    external_scripts = ExternalProcessors(args.tokenizer, args.truecaser,
+    external_processors = ExternalProcessors(args.tokenizer, args.truecaser,
                                           args.prepro, args.annotators,
-                                          args.postpro, args.detruecaser,
-                                          args.detokenizer)
+                                          args.extractors, args.postpro,
+                                          args.detruecaser, args.detokenizer)
 
     cherrypy.config.update({'server.request_queue_size' : 1000,
                             'server.socket_port': args.port,
@@ -450,12 +482,10 @@ if __name__ == "__main__":
     if args.logprefix:
         cherrypy.config.update({'log.access_file': "%s.access.log" %args.logprefix,
                                 'log.error_file': "%s.error.log" %args.logprefix})
-    external_cmds = (args.prepro, args.annotators, args.extractors, args.postpro)
     cherrypy.quickstart(Root(moses.source_queue,
-                             external_cmds=external_cmds,
+                             external_processors = external_processors,
                              slang = args.slang, tlang = args.tlang,
                              pretty = args.pretty,
-                             verbose = args.verbose,
-                             persistent_processes = persistent_processes))
+                             verbose = args.verbose))
 
     moses.close()
