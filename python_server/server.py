@@ -7,7 +7,6 @@ import cherrypy
 import json
 import logging
 import re
-from itertools import izip
 from threading import Timer
 
 def popen(cmd):
@@ -50,7 +49,7 @@ class Filter(object):
     def __remove_newlines(self, s):
         s = s.replace('\r\n',' ')
         s = s.replace('\n',' ')
-        return s       
+        return s
 
     def __collapse_spaces(self, s):
         return re.sub('\s\s+', ' ', s)
@@ -143,27 +142,72 @@ def json_error(status, message, traceback, version):
     err = {"status":status, "message":message, "traceback":traceback, "version":version}
     return json.dumps(err, sort_keys=True, indent=4)
 
+class ExternalProcessor(object):
+    """ wraps an external script and does utf-8 conversions, is thread-safe """
+    # TODO: timeout, restart-every
+
+    def __init__(self, cmd):
+        self.cmd = cmd
+        if self.cmd != None:
+            self.proc = popen(cmd)
+            self._lock = threading.Lock()
+
+    def process(self, line):
+        if self.cmd == None: return line
+        u_string = u"%s\n" %line
+        u_string = u_string.encode("utf-8")
+        result = u_string  #fallback: return input
+        with self._lock:
+            self.proc.stdin.write(u_string)
+            self.proc.stdin.flush()
+            result = self.proc.stdout.readline()
+        return result.decode("utf-8").rstrip()
+
+class ExternalProcessors(object):
+    """ single object that does all the pre- and postprocessing """
+
+    def _exec(self, procs):
+        def f(self, line):
+            for proc in procs:
+                line = proc.process(line)
+            return line
+        return f
+
+    def __init__(self, tokenizer_cmd, truecaser_cmd, prepro_cmds,
+                 annotator_cmds, extractor_cmds, postpro_cmds,
+                 detruecaser_cmd, detokenizer_cmd):
+        self._tokenizer = map(ExternalProcessor, tokenizer_cmd)
+        self.tokenize = self._exec(self._tokenizer)
+        self._truecaser = map(ExternalProcessor, truecaser_cmd)
+        self.truecase = self._exec(self._truecaser)
+        self._preprocessors = map(ExternalProcessor, prepro_cmds)
+        self.prepro = self._exec(self._preprocessors)
+        self._annotators = map(ExternalProcessor, annotator_cmds)
+        self.annotate =  self._exec(self._annotators)
+        self._extractors = map(ExternalProcessor, extractor_cmds)
+        self.extract = self._exec(self._extractors)
+        self._postprocessors = map(ExternalProcessor, postpro_cmds)
+        self.postpro = self._exec(self._postprocessors)
+        self._detruecaser = map(ExternalProcessor,detruecaser_cmd)
+        self.detruecase = self._exec(self._detruecaser)
+        self._detokenizer = map(ExternalProcessor,detokenizer_cmd)
+        self.detokenize = self._exec(self._detokenizer)
+
 class Root(object):
     required_params = ["q", "key", "target", "source"]
 
-    def __init__(self, queue, external_cmds=[None,None,None,None],
-                 postpro_cmd=None, slang=None,
-                 tlang=None, pretty=False, persistent_processes=False,
-                 verbose=0, timeout=-1):
+    def __init__(self, queue, external_processors, slang=None, tlang=None,
+                 pretty=False, verbose=0, timeout=-1):
         self.filter = Filter(remove_newlines=True, collapse_spaces=True)
         self.queue = queue
+        self.external_processors = external_processors
 
-        self.prepro_cmd, self.annotator_cmd, self.extractors_cmd, \
-            self.postpro_cmd  = [c if c != None else [] for c in external_cmds]
-
-        if postpro_cmd != None:
-            self.postpro_cmd = postpro_cmd
         self.expected_params = {}
         if slang:
             self.expected_params['source'] = slang.lower()
         if tlang:
             self.expected_params['target'] = tlang.lower()
-        self.persist = bool(persistent_processes)
+
         self.pretty = bool(pretty)
         self.timeout = timeout
         self.verbose = verbose
@@ -200,13 +244,6 @@ class Root(object):
         errors = [{"originalquery":q, "location" : location}]
         message = "Timeout after %ss" %self.timeout
         return {"error": {"errors":errors, "code":400, "message":message}}
-
-    def _pipe(self, proc, s):
-        u_string = u"%s\n" %s
-        proc.stdin.write(u_string.encode("utf-8"))
-        proc.stdin.flush()
-        # TODO: timeout
-        return proc.stdout.readline().decode("utf-8").rstrip()
 
     def _prepro(self, query):
         """ run preprocessing scripts such a tokenizers """
@@ -271,7 +308,7 @@ class Root(object):
 
     def _getPhraseAlignment(self, query):
         return self._getAlignment(query, 'phrase_alignment')
-   
+
     def _getWordAlignment(self, query):
         return self._getAlignment(query, 'word_alignment')
 
@@ -284,6 +321,10 @@ class Root(object):
         return json.loads(string)
 
     @cherrypy.expose
+    def tokenize(self, **kwargs):
+        pass
+
+    @cherrypy.expose
     def translate(self, **kwargs):
         response = cherrypy.response
         response.headers['Content-Type'] = 'application/json'
@@ -294,13 +335,16 @@ class Root(object):
             return self._dump_json(errors)
 
         q = self.filter.filter(kwargs["q"])
-        self.log("The server is working on: %s" %repr(kwargs["q"]))
-        self.log_info("Request before preprocessing: %s" %repr(kwargs["q"]))
+        self.log("The server is working on: %s" %repr(q))
+        self.log_info("Request before preprocessing: %s" %repr(q))
         translationDict = {"sourceText":q.strip()}
-        q = self._prepro(q)
+        q = self.external_processors.tokenize(q)
+        q = self.external_processors.truecase(q)
+        q = self.external_processors.prepro(q)
+
         self.log_info("Request after preprocessing: %s" %repr(q))
         self.log_info("Request before annotation: %s" %repr(q))
-        q = self._annotate(self.filter.filter(kwargs["q"]))
+        q = self.external_processors.annotate(q)
         self.log_info("Request after annotation: %s" %repr(q))
 
         translation = ""
@@ -316,7 +360,7 @@ class Root(object):
                 return self._timeout_error(q, 'translation')
 
         self.log_info("Translation before extraction: %s" %translation)
-        translation = self._extract(translation)
+        translation = self.external_processors.extract(translation)
         self.log_info("Translation after extraction: %s" %translation)
 
         translation, phraseAlignment = self._getPhraseAlignment(translation)
@@ -331,7 +375,10 @@ class Root(object):
         self.log_info("Translation after removing additional info: %s" %translation)
 
         self.log_info("Translation before postprocessing: %s" %translation)
-        translation = self._postpro(translation)
+        translation = self.external_processors.postpro(translation)
+        translation = self.external_processors.detruecase(translation)
+        translation = self.external_processors.detokenize(translation)
+
         self.log_info("Translation after postprocessing: %s" %translation)
 
         if translation:
@@ -341,7 +388,6 @@ class Root(object):
         if wordAlignment:
             translationDict["wordAlignment"] = wordAlignment
         data = {"data" : {"translations" : [translationDict]}}
-##        data = {"data" : {"translations" : [{"translatedText":translation, "phraseAlignment":phraseAlignmentString, "wordAlignment":wordAlignmentString}]}}
         self.log("The server is returning: %s" %self._dump_json(data))
         return self._dump_json(data)
 
@@ -361,11 +407,15 @@ if __name__ == "__main__":
     parser.add_argument('-nthreads', help='number of server threads, default: 8', type=int, default=8)
     parser.add_argument('-moses', dest="moses_path", action='store', help='path to moses executable', default="/home/buck/src/mosesdecoder/moses-cmd/src/moses")
     parser.add_argument('-options', dest="moses_options", action='store', help='moses options, including .ini -async-output -print-id', default="-f phrase-model/moses.ini -v 0 -threads 2 -async-output -print-id")
-    parser.add_argument('-prepro', nargs="+", help='complete call to preprocessing script(s) including arguments')
-    parser.add_argument('-postpro', nargs="+", help='complete call to postprocessing script(s) including arguments')
 
-    parser.add_argument('-annotators', nargs="+", help='call to scripts run AFTER prepro, before translation')
+    parser.add_argument('-tokenizer', nargs="+", help='call to tokenizer, including arguments, PREPROSTEP 1')
+    parser.add_argument('-truecaser', nargs="+", help='call to truecaser, including arguments, PREPROSTEP 2')
+    parser.add_argument('-prepro', nargs="+", help='complete call to preprocessing script(s) including arguments, PREPROSTEP(S) 3')
+    parser.add_argument('-annotators', nargs="+", help='call to scripts run AFTER prepro, before translation, PREPROSTEP(S) 4')
     parser.add_argument('-extractors', nargs="+", help='call to scripts run BEFORE postpro, after translation')
+    parser.add_argument('-postpro', nargs="+", help='complete call to postprocessing script(s) including arguments, run before detruecaser')
+    parser.add_argument('-detruecaser', nargs='+', help='call to detruecaser, including arguments')
+    parser.add_argument('-detokenizer', nargs='+', help='call to detokenizer, including arguments')
 
     parser.add_argument('-pretty', action='store_true', help='pretty print json')
     parser.add_argument('-slang', help='source language code')
@@ -386,6 +436,10 @@ if __name__ == "__main__":
         init_log("%s.trans.log" %args.logprefix)
 
     moses = MosesProc(" ".join((args.moses_path, args.moses_options)))
+    external_scripts = ExternalProcessors(args.tokenizer, args.truecaser,
+                                          args.prepro, args.annotators,
+                                          args.postpro, args.detruecaser,
+                                          args.detokenizer)
 
     cherrypy.config.update({'server.request_queue_size' : 1000,
                             'server.socket_port': args.port,
