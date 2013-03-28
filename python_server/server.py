@@ -1,12 +1,12 @@
 #!/usr/bin/python -u
 import sys
-import Queue
 import threading
 import subprocess
 import cherrypy
 import json
 import logging
 import re
+import xmlrpclib
 from threading import Timer
 
 def popen(cmd):
@@ -53,90 +53,6 @@ class Filter(object):
 
     def __collapse_spaces(self, s):
         return re.sub('\s\s+', ' ', s)
-
-class WriteThread(threading.Thread):
-    def __init__(self, p_in, source_queue, web_queue):
-        threading.Thread.__init__(self)
-        self.pipe = p_in
-        self.source_queue = source_queue
-        self.web_queue = web_queue
-
-    def run(self):
-        i = 0
-        while True:
-            result_queue, source = self.source_queue.get()
-            self.web_queue.put( (i, result_queue) )
-            wrapped_src = u"<seg id=%s>%s</seg>\n" %(i, source)
-            self.log("writing to process: %s" %repr(wrapped_src))
-            self.pipe.write(wrapped_src.encode("utf-8"))
-            self.pipe.flush()
-            i += 1
-            self.source_queue.task_done()
-
-    def log(self, message):
-        logger = logging.getLogger('translation_log.writer')
-        logger.info(message)
-
-class ReadThread(threading.Thread):
-    def __init__(self, p_out, web_queue):
-        threading.Thread.__init__(self)
-        self.pipe = p_out
-        self.web_queue = web_queue
-
-    def run(self):
-        result_queues = []
-        while True:
-            line = self.pipe.readline() # blocking read
-            while not self.web_queue.empty():
-                result_queues.append(self.web_queue.get())
-            if line == '':
-                assert self.web_queue.empty(), "still waiting for answers\n"
-                assert result_queues, "unanswered requests\n"
-                return
-            line = line.decode("utf-8").rstrip().split(" ", 1)
-            self.log("reader read: %s" %repr(line))
-
-            found = False
-            self.log("looking for id %s in %s result queues" %(line[0], len(result_queues)))
-            for idx, (i, q) in enumerate(result_queues):
-                if i == int(line[0]):
-                    if len(line) > 1:
-                        q.put(line[1])
-                    else:
-                        q.put("")
-                    result_queues.pop(idx)
-                    found = True
-                    break
-            assert found, "id %s not found!\n" %(line[0])
-
-    def log(self, message):
-        logger = logging.getLogger('translation_log.reader')
-        logger.info(message)
-
-class MosesProc(object):
-    def __init__(self, cmd):
-        self.proc = popen(cmd)
-
-        self.source_queue = Queue.Queue()
-        self.web_queue = Queue.Queue()
-
-        self.writer = WriteThread(self.proc.stdin, self.source_queue, self.web_queue)
-        self.writer.setDaemon(True)
-        self.writer.start()
-
-        self.reader = ReadThread(self.proc.stdout, self.web_queue)
-        self.reader.setDaemon(True)
-        self.reader.start()
-
-    def close(self):
-        self.source_queue.join() # wait until all items in source_queue are processed
-        self.proc.stdin.close()
-        self.proc.wait()
-        self.log("source_queue empty: %s" %self.source_queue.empty())
-
-    def log(self, message):
-        logger = logging.getLogger('translation_log.moses')
-        logger.info(message)
 
 def json_error(status, message, traceback, version):
     err = {"status":status, "message":message, "traceback":traceback, "version":version}
@@ -196,10 +112,10 @@ class ExternalProcessors(object):
 class Root(object):
     required_params = ["q", "key", "target", "source"]
 
-    def __init__(self, queue, external_processors, slang=None, tlang=None,
+    def __init__(self, moses_url, external_processors, slang=None, tlang=None,
                  pretty=False, verbose=0, timeout=-1):
         self.filter = Filter(remove_newlines=True, collapse_spaces=True)
-        self.queue = queue
+        self.moses_url = moses_url
         self.external_processors = external_processors
 
         self.expected_params = {}
@@ -245,48 +161,6 @@ class Root(object):
         message = "Timeout after %ss" %self.timeout
         return {"error": {"errors":errors, "code":400, "message":message}}
 
-    def _prepro(self, query):
-        """ run preprocessing scripts such a tokenizers """
-        if not self.persist or not hasattr(cherrypy.thread_data, 'prepro'):
-            if not self.persist:
-                map(pclose, cherrypy.thread_data.prepro)
-            cherrypy.thread_data.prepro = map(popen, self.prepro_cmd)
-        for proc in cherrypy.thread_data.prepro:
-            query = self._pipe(proc, query)
-        return query
-
-    def _annotate(self, query):
-        """ annotate query with additional information that is also piped
-            into the decoder
-        """
-        if not self.persist or not hasattr(cherrypy.thread_data, 'annotators'):
-            if not self.persist:
-                map(pclose, cherrypy.thread_data.annotators)
-            cherrypy.thread_data.annotators = map(popen, self.annotator_cmd)
-        for proc in cherrypy.thread_data.annotators:
-            query = self._pipe(proc, query)
-        return query
-
-    def _postpro(self, query):
-        """ run post-processing scripts such as detokenizers """
-        if not self.persist or not hasattr(cherrypy.thread_data, 'postpro'):
-            if not self.persist:
-                map(pclose, cherrypy.thread_data.postpro)
-            cherrypy.thread_data.postpro = map(popen, self.postpro_cmd)
-        for proc in cherrypy.thread_data.postpro:
-            query = self._pipe(proc, query)
-        return query
-
-    def _extract(self, query):
-        """ run information extractors """
-        if not self.persist or not hasattr(cherrypy.thread_data, 'extractors'):
-            if not self.persist:
-                map(pclose, cherrypy.thread_data.extractors)
-            cherrypy.thread_data.extractors = map(popen, self.extractors_cmd)
-        for proc in cherrypy.thread_data.extractors:
-            query = self._pipe(proc, query)
-        return query
-
     def _getOnlyTranslation(self, query):
         re_align = re.compile(r'<passthrough[^>]*\/>')
         query = re_align.sub('',query)
@@ -327,8 +201,8 @@ class Root(object):
         return self._dump_json(data)
 
     @cherrypy.expose
-    def tokenize(self, **kwargs):
-        q = self.filter.filter(kwargs["q"])
+    def tokenize(self, q):
+        #q = self.filter.filter(kwargs["q"])
         return self._process_externally(q, self.external_processors.tokenize, 'tokenizedText')
 
     @cherrypy.expose
@@ -356,6 +230,12 @@ class Root(object):
         q = self.filter.filter(kwargs["q"])
         return self._process_externally(q, self.external_processors.postpro, 'postprocessedText')
 
+    def _translate(self, source):
+        proxy = xmlrpclib.ServerProxy(self.moses_url)
+        #params = {"text":source, "align":"true", "report-all-factors":"false"}
+        params = {"text":source, "align":"true", "sg":"true"}
+        return proxy.translate(params)
+
     @cherrypy.expose
     def translate(self, **kwargs):
         response = cherrypy.response
@@ -379,17 +259,16 @@ class Root(object):
         q = self.external_processors.annotate(q)
         self.log_info("Request after annotation: %s" %repr(q))
 
-        translation = ""
-        if q.strip():
-            result_queue = Queue.Queue()
-            self.queue.put((result_queue, q))
-            try:
-                if self.timeout and self.timeout > 0:
-                    translation = result_queue.get(timeout=self.timeout)
-                else:
-                    translation = result_queue.get()
-            except Queue.Empty:
-                return self._timeout_error(q, 'translation')
+        translation = ''
+        result = self._translate(q) # timeout?
+        if 'text' in result:
+            translation = result['text']
+        else:
+            return self._timeout_error(q, 'translation')
+        print result.keys()
+        print result['sg']
+        if 'sg' in result.keys():
+            translationDict['searchGraph'] = result['sg']
 
         self.log_info("Translation before extraction: %s" %translation)
         translation = self.external_processors.extract(translation)
@@ -437,8 +316,11 @@ if __name__ == "__main__":
     parser.add_argument('-ip', help='server ip to bind to, default: localhost', default="127.0.0.1")
     parser.add_argument('-port', action='store', help='server port to bind to, default: 8080', type=int, default=8080)
     parser.add_argument('-nthreads', help='number of server threads, default: 8', type=int, default=8)
-    parser.add_argument('-moses', dest="moses_path", action='store', help='path to moses executable', required=True)
-    parser.add_argument('-options', dest="moses_options", action='store', help='moses options, including .ini -async-output -print-id', required=True)
+    #parser.add_argument('-moses', dest="moses_path", action='store', help='path to moses executable', required=True)
+    #parser.add_argument('-options', dest="moses_options", action='store', help='moses options, including .ini -async-output -print-id', required=True)
+    
+    parser.add_argument('-mosesurl', dest="moses_url", action='store', help='url of mosesserver', required=True)
+    parser.add_argument('-timeout', help='timeout for call to translation engine, default: unlimited', type=int)
 
     parser.add_argument('-tokenizer', nargs="+", help='call to tokenizer, including arguments, PREPROSTEP 1', default=[])
     parser.add_argument('-truecaser', nargs="+", help='call to truecaser, including arguments, PREPROSTEP 2', default=[])
@@ -454,7 +336,6 @@ if __name__ == "__main__":
     parser.add_argument('-tlang', help='target language code')
     #parser.add_argument('-log', choices=['DEBUG', 'INFO'], help='logging level, default:DEBUG', default='DEBUG')
     parser.add_argument('-logprefix', help='logfile prefix, default: write to stderr')
-    parser.add_argument('-timeout', help='timeout for call to translation engine, default: unlimited', type=int)
     parser.add_argument('-verbose', help='verbosity level, default: 0', type=int, default=0)
     # persistent threads
     thread_options = parser.add_mutually_exclusive_group()
@@ -467,7 +348,6 @@ if __name__ == "__main__":
     if args.logprefix:
         init_log("%s.trans.log" %args.logprefix)
 
-    moses = MosesProc(" ".join((args.moses_path, args.moses_options)))
     external_processors = ExternalProcessors(args.tokenizer, args.truecaser,
                                           args.prepro, args.annotators,
                                           args.extractors, args.postpro,
@@ -482,10 +362,9 @@ if __name__ == "__main__":
     if args.logprefix:
         cherrypy.config.update({'log.access_file': "%s.access.log" %args.logprefix,
                                 'log.error_file': "%s.error.log" %args.logprefix})
-    cherrypy.quickstart(Root(moses.source_queue,
+    cherrypy.quickstart(Root(args.moses_url,
                              external_processors = external_processors,
                              slang = args.slang, tlang = args.tlang,
                              pretty = args.pretty,
                              verbose = args.verbose))
 
-    moses.close()
