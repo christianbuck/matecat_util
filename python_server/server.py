@@ -230,10 +230,14 @@ class Root(object):
         q = self.filter.filter(kwargs["q"])
         return self._process_externally(q, self.external_processors.postpro, 'postprocessedText')
 
-    def _translate(self, source):
+    def _translate(self, source, sg=False, align=False, topt=False, factors=False):
         proxy = xmlrpclib.ServerProxy(self.moses_url)
         #params = {"text":source, "align":"true", "report-all-factors":"false"}
-        params = {"text":source, "align":"true", "sg":"true"}
+        params = {"text":source}
+        if align: params["align"] = "true"
+        if sg: params["sg"] = "true"
+        if topt: params["topt"] = "true"
+        if factors: params["report-all-factors"] = "true"
         return proxy.translate(params)
 
     @cherrypy.expose
@@ -260,15 +264,24 @@ class Root(object):
         self.log_info("Request after annotation: %s" %repr(q))
 
         translation = ''
-        result = self._translate(q) # timeout?
+        report_search_graph = 'sg' in kwargs
+        report_translation_options = 'topt' in kwargs
+        report_alignment = 'align' in kwargs
+        result = self._translate(q, sg=report_search_graph,
+                                 topt = report_translation_options,
+                                 align = report_alignment)
         if 'text' in result:
             translation = result['text']
         else:
             return self._timeout_error(q, 'translation')
         print result.keys()
-        print result['sg']
-        if 'sg' in result.keys():
+
+        if 'sg' in result:
             translationDict['searchGraph'] = result['sg']
+        if 'topt' in result:
+            translationDict['topt'] = result['topt']
+        if 'align' in result:
+            translationDict['alignment'] = result['align']
 
         self.log_info("Translation before extraction: %s" %translation)
         translation = self.external_processors.extract(translation)
@@ -318,7 +331,7 @@ if __name__ == "__main__":
     parser.add_argument('-nthreads', help='number of server threads, default: 8', type=int, default=8)
     #parser.add_argument('-moses', dest="moses_path", action='store', help='path to moses executable', required=True)
     #parser.add_argument('-options', dest="moses_options", action='store', help='moses options, including .ini -async-output -print-id', required=True)
-    
+
     parser.add_argument('-mosesurl', dest="moses_url", action='store', help='url of mosesserver', required=True)
     parser.add_argument('-timeout', help='timeout for call to translation engine, default: unlimited', type=int)
 
@@ -367,4 +380,3 @@ if __name__ == "__main__":
                              slang = args.slang, tlang = args.tlang,
                              pretty = args.pretty,
                              verbose = args.verbose))
-
