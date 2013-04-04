@@ -112,11 +112,12 @@ class ExternalProcessors(object):
 class Root(object):
     required_params = ["q", "key", "target", "source"]
 
-    def __init__(self, moses_url, external_processors, slang=None, tlang=None,
-                 pretty=False, verbose=0, timeout=-1):
+    def __init__(self, moses_url, external_processors, tgt_external_processors,
+                 slang=None, tlang=None, pretty=False, verbose=0, timeout=-1):
         self.filter = Filter(remove_newlines=True, collapse_spaces=True)
         self.moses_url = moses_url
         self.external_processors = external_processors
+        self.tgt_external_processors = tgt_external_processors
 
         self.expected_params = {}
         if slang:
@@ -313,7 +314,24 @@ class Root(object):
             translationDict["wordAlignment"] = wordAlignment
         data = {"data" : {"translations" : [translationDict]}}
         self.log("The server is returning: %s" %self._dump_json(data))
+
+    @cherrypy.expose
+    def update(self, source, target):
+        source = self.external_processors.tokenize(source)
+        source = self.external_processors.truecase(source)
+        source = self.external_processors.prepro(source)
+
+        target = self.tgt_external_processors.tokenize(target)
+        target = self.tgt_external_processors.truecase(target)
+        target = self.tgt_external_processors.prepro(target)
+
+        sys.stderr.write(source)
+        sys.stderr.write(target)
+
+
+        data = {'source':source.split(), 'target':target.split()}
         return self._dump_json(data)
+
 
     def log_info(self, message):
         if self.verbose > 0:
@@ -335,14 +353,19 @@ if __name__ == "__main__":
     parser.add_argument('-mosesurl', dest="moses_url", action='store', help='url of mosesserver', required=True)
     parser.add_argument('-timeout', help='timeout for call to translation engine, default: unlimited', type=int)
 
-    parser.add_argument('-tokenizer', nargs="+", help='call to tokenizer, including arguments, PREPROSTEP 1', default=[])
-    parser.add_argument('-truecaser', nargs="+", help='call to truecaser, including arguments, PREPROSTEP 2', default=[])
+    parser.add_argument('-tokenizer', nargs="+", help='call to tokenizer, including arguments, PREPROSTEP(S) 1', default=[])
+    parser.add_argument('-truecaser', nargs="+", help='call to truecaser, including arguments, PREPROSTEP(S) 2', default=[])
     parser.add_argument('-prepro', nargs="+", help='complete call to preprocessing script(s) including arguments, PREPROSTEP(S) 3', default=[])
     parser.add_argument('-annotators', nargs="+", help='call to scripts run AFTER prepro, before translation, PREPROSTEP(S) 4', default=[])
     parser.add_argument('-extractors', nargs="+", help='call to scripts run BEFORE postpro, after translation', default=[])
     parser.add_argument('-postpro', nargs="+", help='complete call to postprocessing script(s) including arguments, run before detruecaser', default=[])
     parser.add_argument('-detruecaser', nargs='+', help='call to detruecaser, including arguments', default=[])
     parser.add_argument('-detokenizer', nargs='+', help='call to detokenizer, including arguments', default=[])
+
+    parser.add_argument('-tgt-tokenizer', nargs="+", dest="tgt_tokenizer", help='call to target tokenizer, including arguments, PREPROSTEP(S) 1', default=[])
+    parser.add_argument('-tgt-truecaser', nargs="+", dest="tgt_truecaser", help='call to target truecaser, including arguments, PREPROSTEP(S) 2', default=[])
+    parser.add_argument('-tgt-prepro', nargs="+", dest="tgt_prepro", help='complete call to target preprocessing script(s) including arguments, PREPROSTEP(S) 3', default=[])
+
 
     parser.add_argument('-pretty', action='store_true', help='pretty print json')
     parser.add_argument('-slang', help='source language code')
@@ -366,6 +389,11 @@ if __name__ == "__main__":
                                           args.extractors, args.postpro,
                                           args.detruecaser, args.detokenizer)
 
+    tgt_external_processors = ExternalProcessors(args.tgt_tokenizer,
+                                                 args.tgt_truecaser,
+                                                 args.tgt_prepro,
+                                                 [], [], [], [], [])
+
     cherrypy.config.update({'server.request_queue_size' : 1000,
                             'server.socket_port': args.port,
                             'server.thread_pool': args.nthreads,
@@ -377,6 +405,7 @@ if __name__ == "__main__":
                                 'log.error_file': "%s.error.log" %args.logprefix})
     cherrypy.quickstart(Root(args.moses_url,
                              external_processors = external_processors,
+                             tgt_external_processors = tgt_external_processors,
                              slang = args.slang, tlang = args.tlang,
                              pretty = args.pretty,
                              verbose = args.verbose))
