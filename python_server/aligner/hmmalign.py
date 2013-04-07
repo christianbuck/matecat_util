@@ -130,46 +130,70 @@ class HMMAligner(object):
             Q = self.init_q(J, I, phrase_alignment)
         for j in range(J): # iterate of source positions
             source_word = src[j]
+
+            found = False
+            for i in range(I):
+                target_word = tgt[i]
+                if self.lex_probs.get(source_word, target_word) > 0:
+                    found = True
+            if not found:
+                print "source word %s is impossible given target %s" %(source_word, tgt)
+
+
             for i in range(2*I):  # all possible a_j
                 if not Q[j][i] == None: # ignore alignments marked as impossible
                     continue
                 target_word = 0 # NULL word means unaligned
                 if i < I:
                     target_word = tgt[i]
-                lex_prob = self.lex_probs.get(source_word, target_word, default=0.0)
+                lex_prob = self.lex_probs.get(source_word, target_word, default=self.min_prob)
+                #if lex_prob == 0:
+                #    Q[j][i] = (self.log_min_prob,-1)
+                #    continue
                 if j == 0: # first word
                     jump_prob = 1.0
-                    Q[j][i] = (jump_prob * lex_prob, -1)
+#                    Q[j][i] = (jump_prob * lex_prob, -1)
+                    Q[j][i] = (log(jump_prob) + log(lex_prob), -1)
                 else:
                     best = None
-                    q_max = 1.0 # for numerical stability
-                    try:
-                        q_max = max(q[0] for q in Q[j-1] if not q==None)
-                    except ValueError:
-                        pass
+                    #q_max = 1.0 # for numerical stability
+                    #try:
+                    #    q_max = max(q[0] for q in Q[j-1] if not q==None)
+                    #except ValueError:
+                    #    pass
                     for k in range(2*I): # a_{j-1}, i' in Och's paper
                         jump_prob = 0.0
-                        if i < I:
+                        if i < I: # current word is aligned, previous maybe not
                             jump = i - (k%I)
-                            jump_prob = self.get_jumpprob(I, -jump)
-                        else: # align to nullword
-                            if k%I == i%I:
-                                jump_prob = pnull
+                            jump_prob = self.get_jumpprob(I, jump) # TODO: + or -?
+                        elif k%I == i%I: # align to nullword
+                            jump_prob = pnull
+                        else:
+                            continue
                         prev_prob = Q[j-1][k][0]
-                        if q_max > 0:
-                            prev_prob /= q_max
-                        prob = jump_prob * prev_prob
+                        #if q_max > 0:
+                        #    prev_prob /= q_max
+                        prob = log(jump_prob) + prev_prob
                         if best == None or best[1] < prob:
                             best = (k, prob)
-                    Q[j][i] = (best[1]*lex_prob, best[0])
+                    Q[j][i] = (best[1] + log(lex_prob), best[0])
+        #self.__printQ(Q, transpose=True)
         return Q
 
     def __printQ(self, Q, transpose=False):
         """ mostly for debugging """
+        #J = len(Q)
+        I = len(Q[0])/2
         if transpose:
             for j in range(len(Q)):
                 for i in range(len(Q[0])):
-                    print "Q(%s,%s)=%s" %(j,i,str(Q[j][i]))
+                    i_s = i
+                    if i >= I:
+                        i_s = "%s+%s" %(i%I, I)
+                    prev = Q[j][i][1]
+                    if prev >= I:
+                        prev = "%s+%s" %(prev%I, I)
+                    print "Q(%s,%s)=%.3f (%s)" %(j, i_s, Q[j][i][0], prev)
         else:
             for i in range(len(Q[0])):
                 for j in range(len(Q)):
