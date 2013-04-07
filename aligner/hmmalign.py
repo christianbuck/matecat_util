@@ -5,8 +5,6 @@ import gzip, io
 from collections import defaultdict
 from itertools import imap
 
-#from moparser import MosesOutputParser
-
 class Vocabulary(object):
     def __init__(self, f):
         self.voc = {}
@@ -33,11 +31,9 @@ class LexTrans(object):
         for line in imap(str.split, lexprob_file):
             # process both Giza and MGiza formats
             if len(line) == 3:
-                #src, tgt, p = line
                 tgt, src, p = line
             else:
                 assert len(line) == 4
-                #src, tgt, cnt, p = line
                 tgt, src, cnt, p = line
             if float(p) > min_prob:
                 self.lex_probs[int(tgt)][int(src)] = float(p)   # p(src|tgt)
@@ -132,21 +128,15 @@ class HMMAligner(object):
         Q = [[None]*I*2 for j in range(J)]
         if phrase_alignment:
             Q = self.init_q(J, I, phrase_alignment)
-        #jump_probs = self.transition_probs[I]
         for j in range(J): # iterate of source positions
             source_word = src[j]
-            #assert source_word in self.lex_probs
-            #print "### j = ", j
             for i in range(2*I):  # all possible a_j
-                #print "### i = ", i
                 if not Q[j][i] == None: # ignore alignments marked as impossible
                     continue
                 target_word = 0 # NULL word means unaligned
                 if i < I:
                     target_word = tgt[i]
-                #assert target_word in self.lex_probs[source_word]
                 lex_prob = self.lex_probs.get(source_word, target_word, default=0.0)
-                #print "p(%s|%s)=%s" %(source_word, target_word, lex_prob)
                 if j == 0: # first word
                     jump_prob = 1.0
                     Q[j][i] = (jump_prob * lex_prob, -1)
@@ -155,7 +145,6 @@ class HMMAligner(object):
                     q_max = 1.0 # for numerical stability
                     try:
                         q_max = max(q[0] for q in Q[j-1] if not q==None)
-                        #print "qmax", q_max
                     except ValueError:
                         pass
                     for k in range(2*I): # a_{j-1}, i' in Och's paper
@@ -163,11 +152,9 @@ class HMMAligner(object):
                         if i < I:
                             jump = i - (k%I)
                             jump_prob = self.get_jumpprob(I, -jump)
-                            #print 'jump, jumpprob', jump, jump_prob
                         else: # align to nullword
                             if k%I == i%I:
                                 jump_prob = pnull
-                        #print "jump-prob from", k, " to ", i, ":", jump_prob
                         prev_prob = Q[j-1][k][0]
                         if q_max > 0:
                             prev_prob /= q_max
@@ -175,7 +162,6 @@ class HMMAligner(object):
                         if best == None or best[1] < prob:
                             best = (k, prob)
                     Q[j][i] = (best[1]*lex_prob, best[0])
-        #self.__printQ(Q, transpose=True)
         return Q
 
     def __printQ(self, Q, transpose=False):
