@@ -241,16 +241,31 @@ class BidirectionalAligner(object):
         s_len = len(source_txt.split())
         s2t_align = self.align_s2t(source_txt, target_txt)
         assert len(s2t_align) == s_len
-        s2t_align = " ".join([str(a+1) for j,a in s2t_align])
 
         t_len = len(target_txt.split())
         t2s_align = self.align_t2s(source_txt, target_txt)
         assert len(t2s_align) == t_len
-        t2s_align = " ".join([str(a+1) for i,a in t2s_align])
 
-        s = "1\n%d %s  # %s\n%d %s  #%s\n" %(t_len, target_txt, t2s_align,
-                                             s_len, source_txt, s2t_align)
-        return s
+
+class SymalWrapper(object):
+    def __init__(self, symal_cmd):
+        import subprocess
+        cmd = symal_cmd.split()
+        self.proc = subprocess.Popen(cmd, stdin=subprocess.PIPE,
+                                          stdout=subprocess.PIPE)
+
+    def process(self, source_txt, target_txt, s2t_align, t2s_align):
+        s_len = len(source_txt.split())
+        t_len = len(target_txt.split())
+        s2t_align = " ".join([str(a+1) for j,a in s2t_align])
+        t2s_align = " ".join([str(a+1) for i,a in t2s_align])
+        s = u"1\n%d %s  # %s\n%d %s  #%s\n" %(t_len, target_txt, t2s_align,
+                                              s_len, source_txt, s2t_align)
+        self.proc.stdin.write(s.encode("utf-8"))
+        self.proc.stdin.flush()
+        result = self.proc.stdout.readline()
+        return result.decode("utf-8").rstrip()
+
 
 if __name__ == "__main__":
     import argparse
@@ -263,6 +278,7 @@ if __name__ == "__main__":
     parser.add_argument('targetvoc', action='store', help="target vocabulary")
     parser.add_argument('source', action='store', help="source sentence")
     parser.add_argument('target', action='store', help="target sentence")
+    parser.add_argument('symal', action='store', help="path to symal, including arguments")
     parser.add_argument('-pnull', action='store', type=float, help="jump probability to/from NULL word (default: 0.4)", default=0.4)
     parser.add_argument('-lower', action='store_true', help='lowercase input')
     parser.add_argument('-verbose', action='store_true', help='more output')
