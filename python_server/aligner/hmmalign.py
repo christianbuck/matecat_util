@@ -5,6 +5,7 @@ import gzip, io
 import subprocess
 from collections import defaultdict
 from itertools import imap
+from math import log
 
 class Vocabulary(object):
     def __init__(self, f):
@@ -69,6 +70,9 @@ class LexTrans(object):
 
 class HMMAligner(object):
     def __init__(self, hmm_file, lex_file, min_prob=0.0):
+        self.min_prob = 0.00000001
+        if min_prob>0:
+            self.min_prob = min_prob
         self.lex_probs = LexTrans(lex_file, min_prob=0.0)
         self.transition_probs = defaultdict(dict)
         if hmm_file is not None:
@@ -264,6 +268,8 @@ class BidirectionalAligner(object):
         return align
 
     def symal(self, source_txt, target_txt):
+        if not source_txt.strip() or not target_txt.strip():
+            return ""
         s_len = len(source_txt.split())
         s2t_align = self.align_s2t(source_txt, target_txt)
         assert len(s2t_align) == s_len
@@ -318,8 +324,8 @@ if __name__ == "__main__":
     parser.add_argument('-minp', help='minimal translation probability, used to prune the model', default=0.0, type=float)
     args = parser.parse_args(sys.argv[1:])
 
-    src = "desperate to hold onto power , Pervez Musharraf has discarded Pakistan &apos;s constitutional framework and declared a state of emergency ."
-    tgt = "in dem verzweifelten Versuch , an der Macht festzuhalten , hat Pervez Musharraf den Rahmen der pakistanischen Verfassung verlassen und den Notstand ausgerufen ."
+    tgt = "desperate to hold onto power , Pervez Musharraf has discarded Pakistan &apos;s constitutional framework and declared a state of emergency ."
+    src = "in dem verzweifelten Versuch , an der Macht festzuhalten , hat Pervez Musharraf den Rahmen der pakistanischen Verfassung verlassen und den Notstand ausgerufen ."
 
     ba = BidirectionalAligner(args.sourcevoc, args.targetvoc,
                               args.s2t_hmm, args.s2t_lex,
@@ -330,6 +336,8 @@ if __name__ == "__main__":
     print ba.align_s2t(args.source, args.target)
     print ba.align_t2s(args.source, args.target)
     print ba.symal(args.source, args.target)
+    print ba.align_s2t(src, tgt)
+    print ba.align_t2s(src, tgt)
     print ba.symal(src, tgt)
 
 
