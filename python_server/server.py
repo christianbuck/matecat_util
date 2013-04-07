@@ -8,6 +8,7 @@ import logging
 import re
 import xmlrpclib
 from threading import Timer
+from aligner import hmmalign
 
 def popen(cmd):
     cmd = cmd.split()
@@ -232,6 +233,7 @@ class Root(object):
         return self._process_externally(q, self.external_processors.postpro, 'postprocessedText')
 
     def _translate(self, source, sg=False, align=False, topt=False, factors=False):
+        """ wraps the actual translate call to mosesserver via XMLPRC """
         proxy = xmlrpclib.ServerProxy(self.moses_url)
         #params = {"text":source, "align":"true", "report-all-factors":"false"}
         params = {"text":source}
@@ -240,6 +242,12 @@ class Root(object):
         if topt: params["topt"] = "true"
         if factors: params["report-all-factors"] = "true"
         return proxy.translate(params)
+
+    def _update(self, source, target, alignment):
+        """ wraps the actual update call to mosesserver via XMLPRC """
+        proxy = xmlrpclib.ServerProxy(self.moses_url)
+        params = {"source":source, "target":target, "alignment":alignment}
+        return proxy.updater(params)
 
     @cherrypy.expose
     def translate(self, **kwargs):
@@ -317,6 +325,10 @@ class Root(object):
 
     @cherrypy.expose
     def update(self, source, target):
+        if self.symal == None:
+            message = "need bidirectional aligner for updates"
+            return {"error": {"code":400, "message":message}}
+
         source = self.external_processors.tokenize(source)
         source = self.external_processors.truecase(source)
         source = self.external_processors.prepro(source)
@@ -325,13 +337,12 @@ class Root(object):
         target = self.tgt_external_processors.truecase(target)
         target = self.tgt_external_processors.prepro(target)
 
-        sys.stderr.write(source)
-        sys.stderr.write(target)
+        alignment = self.symal.symal(args.source, args.target)
 
-
-        data = {'source':source.split(), 'target':target.split()}
-        return self._dump_json(data)
-
+        self.log("Updating model with src: %s tgt: %s, align: %s" %(source,
+                                                                    target,
+                                                                    alignment))
+        self._update(source, target, alignment)
 
     def log_info(self, message):
         if self.verbose > 0:
@@ -366,6 +377,16 @@ if __name__ == "__main__":
     parser.add_argument('-tgt-truecaser', nargs="+", dest="tgt_truecaser", help='call to target truecaser, including arguments, PREPROSTEP(S) 2', default=[])
     parser.add_argument('-tgt-prepro', nargs="+", dest="tgt_prepro", help='complete call to target preprocessing script(s) including arguments, PREPROSTEP(S) 3', default=[])
 
+    # Options to run the Bidirectional Aligner for Online Adaptation
+    parser.add_argument('s2t_hmm', action='store', help="HMM transition probs from GIZA++")
+    parser.add_argument('s2t_lex', action='store', help="translation probs")
+    parser.add_argument('t2s_hmm', action='store', help="HMM transition probs from GIZA++")
+    parser.add_argument('t2s_lex', action='store', help="translation probs")
+    parser.add_argument('sourcevoc', action='store', help="source vocabulary")
+    parser.add_argument('targetvoc', action='store', help="target vocabulary")
+    parser.add_argument('symal', action='store', help="path to symal, including arguments")
+    parser.add_argument('-pnull', action='store', type=float, help="jump probability to/from NULL word (default: 0.4)", default=0.4)
+    parser.add_argument('-minp', help='minimal translation probability, used to prune the model', default=0.0, type=float)
 
     parser.add_argument('-pretty', action='store_true', help='pretty print json')
     parser.add_argument('-slang', help='source language code')
@@ -393,6 +414,15 @@ if __name__ == "__main__":
                                                  args.tgt_truecaser,
                                                  args.tgt_prepro,
                                                  [], [], [], [], [])
+
+    if args.s2t_hmm and args.s2t_lex and args.t2s_hmm and args.t2s_lex \
+        and args.sourcevoc and args.targetvoc and args.symal:
+        ba = hmmalign.BidirectionalAligner(args.sourcevoc, args.targetvoc,
+                                           args.s2t_hmm, args.s2t_lex,
+                                           args.t2s_hmm, args.t2s_lex,
+                                           args.minp, args.pnull,
+                                           args.lower, args.verbose,
+                                           symal = args.symal)
 
     cherrypy.config.update({'server.request_queue_size' : 1000,
                             'server.socket_port': args.port,
