@@ -2,6 +2,7 @@
 
 import sys
 import gzip, io
+import subprocess
 from collections import defaultdict
 from itertools import imap
 
@@ -38,7 +39,6 @@ class LexTrans(object):
             if float(p) > min_prob:
                 self.lex_probs[int(tgt)][int(src)] = float(p)   # p(src|tgt)
         self.__sanitycheck()
-
 
     def __contains__(self, src):
         return src in self.lex_probs
@@ -205,7 +205,7 @@ def smart_open(filename):
 
 class BidirectionalAligner(object):
     def __init__(self, svoc, tvoc, s2t_jump, s2t_lex, t2s_jump, t2s_lex,
-                 minp=0.0, pnull=0.4, lower=False, verbose=False):
+                 minp=0.0, pnull=0.4, lower=False, verbose=False, symal=None):
         self.lower = lower
         self.minp = minp
         self.pnull = pnull
@@ -218,6 +218,8 @@ class BidirectionalAligner(object):
                                       smart_open(s2t_lex), min_prob=minp)
         self.t2s_aligner = HMMAligner(smart_open(t2s_jump),
                                       smart_open(t2s_lex), min_prob=minp)
+        self.symal_proc = None if not symal else SymalWrapper(symal)
+
 
     def map_source(self, source_txt):
         return self.src_voc.map_sentence(source_txt, self.lower)
@@ -246,13 +248,18 @@ class BidirectionalAligner(object):
         t2s_align = self.align_t2s(source_txt, target_txt)
         assert len(t2s_align) == t_len
 
+        if self.symal_proc == None:
+            return s2t_align, t2s_align
+        return self.symal_proc.process(source_txt, target_txt,
+                                       s2t_align, t2s_align)
+
 
 class SymalWrapper(object):
     def __init__(self, symal_cmd):
-        import subprocess
-        cmd = symal_cmd.split()
-        self.proc = subprocess.Popen(cmd, stdin=subprocess.PIPE,
-                                          stdout=subprocess.PIPE)
+        self.cmd = symal_cmd.split()
+        #print cmd
+        #self.proc = subprocess.Popen(cmd, stdin=subprocess.PIPE,
+        #                                  stdout=subprocess.PIPE)
 
     def process(self, source_txt, target_txt, s2t_align, t2s_align):
         s_len = len(source_txt.split())
@@ -261,9 +268,10 @@ class SymalWrapper(object):
         t2s_align = " ".join([str(a+1) for i,a in t2s_align])
         s = u"1\n%d %s  # %s\n%d %s  #%s\n" %(t_len, target_txt, t2s_align,
                                               s_len, source_txt, s2t_align)
-        self.proc.stdin.write(s.encode("utf-8"))
-        self.proc.stdin.flush()
-        result = self.proc.stdout.readline()
+        proc = subprocess.Popen(self.cmd, stdin=subprocess.PIPE,
+                                          stdout=subprocess.PIPE,
+                                          stderr=subprocess.PIPE)
+        result, err = proc.communicate(s.encode("utf-8"))
         return result.decode("utf-8").rstrip()
 
 
@@ -276,9 +284,9 @@ if __name__ == "__main__":
     parser.add_argument('t2s_lex', action='store', help="translation probs")
     parser.add_argument('sourcevoc', action='store', help="source vocabulary")
     parser.add_argument('targetvoc', action='store', help="target vocabulary")
+    parser.add_argument('symal', action='store', help="path to symal, including arguments")
     parser.add_argument('source', action='store', help="source sentence")
     parser.add_argument('target', action='store', help="target sentence")
-    parser.add_argument('symal', action='store', help="path to symal, including arguments")
     parser.add_argument('-pnull', action='store', type=float, help="jump probability to/from NULL word (default: 0.4)", default=0.4)
     parser.add_argument('-lower', action='store_true', help='lowercase input')
     parser.add_argument('-verbose', action='store_true', help='more output')
@@ -292,15 +300,18 @@ if __name__ == "__main__":
     ba = BidirectionalAligner(args.sourcevoc, args.targetvoc,
                               args.s2t_hmm, args.s2t_lex,
                               args.t2s_hmm, args.t2s_lex,
-                              args.minp, args.pnull, args.lower, args.verbose)
+                              args.minp, args.pnull, args.lower, args.verbose,
+                              symal = args.symal)
 
     print ba.align_s2t(args.source, args.target)
     print ba.align_t2s(args.source, args.target)
     print ba.symal(args.source, args.target)
+    print ba.symal(src, tgt)
 
 
     sys.exit()
 
+    ############################################################################
     hmm = HMMAligner(smart_open(args.hmmfile), smart_open(args.lexprobs), min_prob=args.minp)
     src_voc = Vocabulary(smart_open(args.sourcevoc))
     tgt_voc = Vocabulary(smart_open(args.targetvoc))
