@@ -114,11 +114,13 @@ class Root(object):
     required_params = ["q", "key", "target", "source"]
 
     def __init__(self, moses_url, external_processors, tgt_external_processors,
+                 bidir_aligner=None,
                  slang=None, tlang=None, pretty=False, verbose=0, timeout=-1):
         self.filter = Filter(remove_newlines=True, collapse_spaces=True)
         self.moses_url = moses_url
         self.external_processors = external_processors
         self.tgt_external_processors = tgt_external_processors
+        self.symal = bidir_aligner
 
         self.expected_params = {}
         if slang:
@@ -316,12 +318,47 @@ class Root(object):
 
         if translation:
             translationDict["translatedText"] = translation
+        else:
+            translationDict["translatedText"] = ''
         if phraseAlignment:
             translationDict["phraseAlignment"] = phraseAlignment
         if wordAlignment:
             translationDict["wordAlignment"] = wordAlignment
         data = {"data" : {"translations" : [translationDict]}}
         self.log("The server is returning: %s" %self._dump_json(data))
+        return self._dump_json(data)
+
+    @cherrypy.expose
+    def align(self, source, target, mode):
+        if self.symal == None:
+            message = "need bidirectional aligner for updates"
+            return {"error": {"code":400, "message":message}}
+        source = self.external_processors.tokenize(source)
+        source = self.external_processors.truecase(source)
+        source = self.external_processors.prepro(source)
+
+        target = self.tgt_external_processors.tokenize(target)
+        target = self.tgt_external_processors.truecase(target)
+        target = self.tgt_external_processors.prepro(target)
+
+        if self.symal == None:
+            message = "need bidirectional aligner for updates"
+            return {"error": {"code":400, "message":message}}
+        alignment = ''
+        if mode == 's2t':
+            alignment = self.symal.align_s2t(source, target)
+            alignment = " ".join(["%s-%s" %(j,i) for j,i in alignment])
+        elif mode == 't2f':
+            alignment = self.symal.align_t2s(source, target)
+            alignment = " ".join(["%s-%s" %(i,j) for i,j in alignment])
+        elif mode == 'sym':
+            pass
+        else:
+            message = "unknow alignment mode %s" %mode
+            return {"error": {"code":400, "message":message}}
+        align_dict = {'source':source, 'target':target, 'alignment':alignment}
+        data = {"data" : {"alignment" : [align_dict]}}
+        return self._dump_json(data)
 
     @cherrypy.expose
     def update(self, source, target):
@@ -337,12 +374,15 @@ class Root(object):
         target = self.tgt_external_processors.truecase(target)
         target = self.tgt_external_processors.prepro(target)
 
-        alignment = self.symal.symal(args.source, args.target)
+        alignment = self.symal.symal(source, target)
 
         self.log("Updating model with src: %s tgt: %s, align: %s" %(source,
                                                                     target,
                                                                     alignment))
         self._update(source, target, alignment)
+        update_dict = {'source':source, 'target':target, 'alignment':alignment}
+        data = {"data" : {"update" : [update_dict]}}
+        return self._dump_json(data)
 
     def log_info(self, message):
         if self.verbose > 0:
@@ -378,14 +418,14 @@ if __name__ == "__main__":
     parser.add_argument('-tgt-prepro', nargs="+", dest="tgt_prepro", help='complete call to target preprocessing script(s) including arguments, PREPROSTEP(S) 3', default=[])
 
     # Options to run the Bidirectional Aligner for Online Adaptation
-    parser.add_argument('s2t_hmm', action='store', help="HMM transition probs from GIZA++")
-    parser.add_argument('s2t_lex', action='store', help="translation probs")
-    parser.add_argument('t2s_hmm', action='store', help="HMM transition probs from GIZA++")
-    parser.add_argument('t2s_lex', action='store', help="translation probs")
-    parser.add_argument('sourcevoc', action='store', help="source vocabulary")
-    parser.add_argument('targetvoc', action='store', help="target vocabulary")
-    parser.add_argument('symal', action='store', help="path to symal, including arguments")
-    parser.add_argument('-pnull', action='store', type=float, help="jump probability to/from NULL word (default: 0.4)", default=0.4)
+    parser.add_argument('-s2t-hmm', dest='s2t_hmm', help="HMM transition probs from GIZA++")
+    parser.add_argument('-s2t-lex', dest='s2t_lex', help="translation probs p(src|tgt)")
+    parser.add_argument('-t2s-hmm', dest='t2s_hmm', help="HMM transition probs from GIZA++")
+    parser.add_argument('-t2s-lex', dest='t2s_lex', help="translation probs p(tgt|src)")
+    parser.add_argument('-sourcevoc', help="source vocabulary")
+    parser.add_argument('-targetvoc', help="target vocabulary")
+    parser.add_argument('-symal', help="path to symal, including arguments")
+    parser.add_argument('-pnull', type=float, help="jump probability to/from NULL word (default: 0.4)", default=0.4)
     parser.add_argument('-minp', help='minimal translation probability, used to prune the model', default=0.0, type=float)
 
     parser.add_argument('-pretty', action='store_true', help='pretty print json')
@@ -405,23 +445,26 @@ if __name__ == "__main__":
     if args.logprefix:
         init_log("%s.trans.log" %args.logprefix)
 
+    sys.stderr.write("loading external source processors ...")
     external_processors = ExternalProcessors(args.tokenizer, args.truecaser,
                                           args.prepro, args.annotators,
                                           args.extractors, args.postpro,
                                           args.detruecaser, args.detokenizer)
 
+    sys.stderr.write("loading external target processors ...")
     tgt_external_processors = ExternalProcessors(args.tgt_tokenizer,
                                                  args.tgt_truecaser,
                                                  args.tgt_prepro,
                                                  [], [], [], [], [])
 
+    ba = None
     if args.s2t_hmm and args.s2t_lex and args.t2s_hmm and args.t2s_lex \
         and args.sourcevoc and args.targetvoc and args.symal:
+        sys.stderr.write("loading bidirectional aligner...")
         ba = hmmalign.BidirectionalAligner(args.sourcevoc, args.targetvoc,
                                            args.s2t_hmm, args.s2t_lex,
                                            args.t2s_hmm, args.t2s_lex,
                                            args.minp, args.pnull,
-                                           args.lower, args.verbose,
                                            symal = args.symal)
 
     cherrypy.config.update({'server.request_queue_size' : 1000,
@@ -436,6 +479,7 @@ if __name__ == "__main__":
     cherrypy.quickstart(Root(args.moses_url,
                              external_processors = external_processors,
                              tgt_external_processors = tgt_external_processors,
+                             bidir_aligner = ba,
                              slang = args.slang, tlang = args.tlang,
                              pretty = args.pretty,
                              verbose = args.verbose))
