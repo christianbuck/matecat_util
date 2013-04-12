@@ -361,26 +361,29 @@ class Root(object):
         return self._dump_json(data)
 
     @cherrypy.expose
-    def update(self, source, target):
+    def update(self, source, target, segment, translation):
         if self.symal == None:
             message = "need bidirectional aligner for updates"
             return {"error": {"code":400, "message":message}}
 
-        source = self.external_processors.tokenize(source)
-        source = self.external_processors.truecase(source)
-        source = self.external_processors.prepro(source)
+        #source_lang = source
+        #target_lang = target
 
-        target = self.tgt_external_processors.tokenize(target)
-        target = self.tgt_external_processors.truecase(target)
-        target = self.tgt_external_processors.prepro(target)
+        segment = self.external_processors.tokenize(segment)
+        segment = self.external_processors.truecase(segment)
+        segment = self.external_processors.prepro(segment)
 
-        alignment = self.symal.symal(source, target)
+        translation = self.tgt_external_processors.tokenize(translation)
+        translation = self.tgt_external_processors.truecase(translation)
+        translation = self.tgt_external_processors.prepro(translation)
 
-        self.log("Updating model with src: %s tgt: %s, align: %s" %(source,
-                                                                    target,
+        alignment = self.symal.symal(segment, translation)
+
+        self.log("Updating model with src: %s tgt: %s, align: %s" %(segment,
+                                                                    translation,
                                                                     alignment))
-        self._update(source, target, alignment)
-        update_dict = {'source':source, 'target':target, 'alignment':alignment}
+        self._update(segment, translation, alignment)
+        update_dict = {'segment':segment, 'translation':translation, 'alignment':alignment}
         data = {"data" : {"update" : [update_dict]}}
         return self._dump_json(data)
 
