@@ -9,6 +9,7 @@ import re
 import xmlrpclib
 from threading import Timer
 from aligner import hmmalign
+from tokentracker import tokentracker
 
 def popen(cmd):
     cmd = cmd.split()
@@ -306,13 +307,22 @@ class Root(object):
         self.log_info("Word alignment: %s" %str(wordAlignment))
         self.log_info("Translation after removing word-alignment: %s" %translation)
 
-        translation = self._getOnlyTranslation(translation)
+        translation = self._getOnlyTranslation(translation).strip()
         self.log_info("Translation after removing additional info: %s" %translation)
 
         self.log_info("Translation before postprocessing: %s" %translation)
+        tt = tokentracker.TokenTracker()
+        raw_translation = translation
+        spans = tt.tokenize(raw_translation)
         translation = self.external_processors.postpro(translation)
+        spans = tt.track_detok(raw_translation, translation, spans)
+        raw_translation = translation
         translation = self.external_processors.detruecase(translation)
+        spans = tt.track_detok(raw_translation, translation, spans)
+        raw_translation = translation
         translation = self.external_processors.detokenize(translation)
+        spans = tt.track_detok(raw_translation, translation, spans)
+        translationDict["spans"] = spans
 
         self.log_info("Translation after postprocessing: %s" %translation)
 
@@ -420,6 +430,9 @@ if __name__ == "__main__":
     parser.add_argument('-tgt-truecaser', nargs="+", dest="tgt_truecaser", help='call to target truecaser, including arguments, PREPROSTEP(S) 2', default=[])
     parser.add_argument('-tgt-prepro', nargs="+", dest="tgt_prepro", help='complete call to target preprocessing script(s) including arguments, PREPROSTEP(S) 3', default=[])
 
+    # Options concerning Confidences
+    parser.add_argument('-nbest-processor', dest='nbest_proc', help="path and arguments for nbest2wpp")
+
     # Options to run the Bidirectional Aligner for Online Adaptation
     parser.add_argument('-s2t-hmm', dest='s2t_hmm', help="HMM transition probs from GIZA++")
     parser.add_argument('-s2t-lex', dest='s2t_lex', help="translation probs p(src|tgt)")
@@ -448,13 +461,13 @@ if __name__ == "__main__":
     if args.logprefix:
         init_log("%s.trans.log" %args.logprefix)
 
-    sys.stderr.write("loading external source processors ...")
+    sys.stderr.write("loading external source processors ...\n")
     external_processors = ExternalProcessors(args.tokenizer, args.truecaser,
                                           args.prepro, args.annotators,
                                           args.extractors, args.postpro,
                                           args.detruecaser, args.detokenizer)
 
-    sys.stderr.write("loading external target processors ...")
+    sys.stderr.write("loading external target processors ...\n")
     tgt_external_processors = ExternalProcessors(args.tgt_tokenizer,
                                                  args.tgt_truecaser,
                                                  args.tgt_prepro,
@@ -463,7 +476,7 @@ if __name__ == "__main__":
     ba = None
     if args.s2t_hmm and args.s2t_lex and args.t2s_hmm and args.t2s_lex \
         and args.sourcevoc and args.targetvoc and args.symal:
-        sys.stderr.write("loading bidirectional aligner...")
+        sys.stderr.write("loading bidirectional aligner...\n")
         ba = hmmalign.BidirectionalAligner(args.sourcevoc, args.targetvoc,
                                            args.s2t_hmm, args.s2t_lex,
                                            args.t2s_hmm, args.t2s_lex,
