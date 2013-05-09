@@ -291,11 +291,11 @@ class SymalWrapper(object):
         #self.proc = subprocess.Popen(cmd, stdin=subprocess.PIPE,
         #                                  stdout=subprocess.PIPE)
 
-    def process(self, source_txt, target_txt, s2t_align, t2s_align):
+    def process(self, source_txt, target_txt, s2t_align, t2s_align, offset=1):
         s_len = len(source_txt.split())
         t_len = len(target_txt.split())
-        s2t_align = " ".join([str(a+1) for j,a in s2t_align])
-        t2s_align = " ".join([str(a+1) for i,a in t2s_align])
+        s2t_align = " ".join([str(a+offset) for j,a in s2t_align])
+        t2s_align = " ".join([str(a+offset) for i,a in t2s_align])
         s = u"1\n%d %s  # %s\n%d %s  #%s\n" %(t_len, target_txt, t2s_align,
                                               s_len, source_txt, s2t_align)
         proc = subprocess.Popen(self.cmd, stdin=subprocess.PIPE,
