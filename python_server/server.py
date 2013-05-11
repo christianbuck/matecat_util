@@ -235,7 +235,7 @@ class Root(object):
         q = self.filter.filter(kwargs["q"])
         return self._process_externally(q, self.external_processors.postpro, 'postprocessedText')
 
-    def _translate(self, source, sg=False, align=False, topt=False, factors=False):
+    def _translate(self, source, sg=False, align=False, topt=False, factors=False, nbest=0):
         """ wraps the actual translate call to mosesserver via XMLPRC """
         proxy = xmlrpclib.ServerProxy(self.moses_url)
         #params = {"text":source, "align":"true", "report-all-factors":"false"}
@@ -244,6 +244,7 @@ class Root(object):
         if sg: params["sg"] = "true"
         if topt: params["topt"] = "true"
         if factors: params["report-all-factors"] = "true"
+        if nbest > 0: params["nbest"] = nbest
         return proxy.translate(params)
 
     def _update(self, source, target, alignment):
@@ -252,48 +253,13 @@ class Root(object):
         params = {"source":source, "target":target, "alignment":alignment}
         return proxy.updater(params)
 
-    @cherrypy.expose
-    def translate(self, **kwargs):
-        response = cherrypy.response
-        response.headers['Content-Type'] = 'application/json'
-
-        errors = self._check_params(kwargs)
-        if errors:
-            cherrypy.response.status = 400
-            return self._dump_json(errors)
-
-        q = self.filter.filter(kwargs["q"])
-        self.log("The server is working on: %s" %repr(q))
-        self.log_info("Request before preprocessing: %s" %repr(q))
-        translationDict = {"sourceText":q.strip()}
-        q = self.external_processors.tokenize(q)
-        q = self.external_processors.truecase(q)
-        q = self.external_processors.prepro(q)
-
-        self.log_info("Request after preprocessing: %s" %repr(q))
-        self.log_info("Request before annotation: %s" %repr(q))
-        q = self.external_processors.annotate(q)
-        self.log_info("Request after annotation: %s" %repr(q))
-
-        translation = ''
-        report_search_graph = 'sg' in kwargs
-        report_translation_options = 'topt' in kwargs
-        report_alignment = 'align' in kwargs
-        result = self._translate(q, sg=report_search_graph,
-                                 topt = report_translation_options,
-                                 align = report_alignment)
-        if 'text' in result:
-            translation = result['text']
-        else:
-            return self._timeout_error(q, 'translation')
-        print result.keys()
-
-        if 'sg' in result:
-            translationDict['searchGraph'] = result['sg']
-        if 'topt' in result:
-            translationDict['topt'] = result['topt']
-        if 'align' in result:
-            translationDict['alignment'] = result['align']
+    def _getTranslation(self, hyp):
+        """ does all the extraction and postprocessing, returns dict including
+            translatedText, spans, and, if available, phraseAlignment,
+            and WordAlignment
+        """
+        translationDict = {}
+        translation = hyp.strip()
 
         self.log_info("Translation before extraction: %s" %translation)
         translation = self.external_processors.extract(translation)
@@ -322,7 +288,9 @@ class Root(object):
         raw_translation = translation
         translation = self.external_processors.detokenize(translation)
         spans = tt.track_detok(raw_translation, translation, spans)
-        translationDict["spans"] = spans
+        if not "tokenization" in translationDict:
+            translationDict["tokenization"] = {}
+        translationDict["tokenization"].update( {'tgt' : spans} )
 
         self.log_info("Translation after postprocessing: %s" %translation)
 
@@ -334,6 +302,72 @@ class Root(object):
             translationDict["phraseAlignment"] = phraseAlignment
         if wordAlignment:
             translationDict["wordAlignment"] = wordAlignment
+
+        return translationDict
+
+
+    @cherrypy.expose
+    def translate(self, **kwargs):
+        response = cherrypy.response
+        response.headers['Content-Type'] = 'application/json'
+
+        errors = self._check_params(kwargs)
+        if errors:
+            cherrypy.response.status = 400
+            return self._dump_json(errors)
+
+        q = self.filter.filter(kwargs["q"])
+        raw_src = q
+        self.log("The server is working on: %s" %repr(q))
+        self.log_info("Request before preprocessing: %s" %repr(q))
+        translationDict = {"sourceText":q.strip()}
+        q = self.external_processors.tokenize(q)
+        q = self.external_processors.truecase(q)
+        q = self.external_processors.prepro(q)
+
+        self.log_info("Request after preprocessing: %s" %repr(q))
+        preprocessed_src = q
+        tt = tokentracker.TokenTracker()
+        src_spans = tt.tokenize(preprocessed_src)
+        src_spans = tt.track_detok(preprocessed_src, raw_src, src_spans)
+
+        self.log_info("Request before annotation: %s" %repr(q))
+        q = self.external_processors.annotate(q)
+        assert len(preprocessed_src.split()) == len(q.split()), \
+                        "annotation should not change number of tokens"
+
+        self.log_info("Request after annotation: %s" %repr(q))
+
+        translation = ''
+        report_search_graph = 'sg' in kwargs
+        report_translation_options = 'topt' in kwargs
+        report_alignment = 'align' in kwargs
+        nbest = 0 if not 'nbest' in kwargs else int(kwargs['nbest'])
+        result = self._translate(q, sg=report_search_graph,
+                                 topt = report_translation_options,
+                                 align = report_alignment,
+                                 nbest = nbest)
+        if 'text' in result:
+            translation = result['text']
+        else:
+            return self._timeout_error(q, 'translation')
+        #print result.keys()
+        translationDict.update(self._getTranslation(translation))
+        translationDict["tokenization"].update( {'src' : src_spans} )
+
+        if 'sg' in result:
+            translationDict['searchGraph'] = result['sg']
+        if 'topt' in result:
+            translationDict['topt'] = result['topt']
+        if 'align' in result:
+            translationDict['alignment'] = result['align']
+        if 'nbest' in result:
+            translationDict['raw_nbest'] = result['nbest']
+            translationDict['nbest'] = []
+            for nbest_result in result['nbest']:
+                hyp = nbest_result['hyp']
+                translationDict['nbest'].append(self._getTranslation(hyp))
+
         data = {"data" : {"translations" : [translationDict]}}
         self.log("The server is returning: %s" %self._dump_json(data))
         return self._dump_json(data)
