@@ -66,9 +66,9 @@ class TokenTracker(object):
                 spans.append([i+1,i+1])
             else:
                 spans[-1][1] = i
-        tokens = [s[span[0]:span[1]+1] for span in spans]
-        print spans
-        print tokens
+        #tokens = [s[span[0]:span[1]+1] for span in spans]
+        #print spans
+        #print tokens
         return spans
 
     def _check_spans(self, s, spans):
@@ -81,7 +81,7 @@ class TokenTracker(object):
             spans = self.tokenize(a)[0]
         lev = Levenshtein(b, a)
         editops = lev.editops()
-        print editops
+        #print editops
         a_idx = 0
         b_idx = 0
         alignment = []
@@ -101,10 +101,10 @@ class TokenTracker(object):
                 alignment.append((a_idx, b_idx))
                 a_idx += 1
                 b_idx += 1
-        print alignment
+        #print alignment
         alignment = dict(alignment)
         new_spans = []
-        print spans
+        #print spans
         for start, end in spans:
             mapped_idx = []
             for a_idx in range(start, end+1):
