@@ -78,7 +78,7 @@ class TokenTracker(object):
 
     def track_detok(self, a, b, spans=None, verbose=False):
         if spans == None:
-            spans = self.tokenize(a)[0]
+            spans = self.tokenize(a)
         lev = Levenshtein(b, a)
         editops = lev.editops()
         #print editops
@@ -114,13 +114,19 @@ class TokenTracker(object):
                 new_spans.append((min(mapped_idx), max(mapped_idx)))
             else:
                 new_spans.append([None, None])
-        #print new_spans
         if verbose:
+            print "old spans: ", spans
+            print "old tokens"
+            for start, end in spans:
+                print '|', a[start:end+1],
+            print "|"
+            print "new spans: ", new_spans
+            print "new tokens"
             for start, end in new_spans:
                 if start == None and end == None:
-                    print "DELETED"
+                    print '|', "DELETED",
                 else:
-                    print b[start:end+1]
+                    print '|', b[start:end+1],
         return new_spans
 
 
