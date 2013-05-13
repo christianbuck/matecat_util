@@ -7,9 +7,11 @@ import json
 import logging
 import re
 import xmlrpclib
+import math
 from threading import Timer
 from aligner import hmmalign
 from tokentracker import tokentracker
+from confidence import wpp
 
 def popen(cmd):
     cmd = cmd.split()
@@ -342,7 +344,14 @@ class Root(object):
         report_search_graph = 'sg' in kwargs
         report_translation_options = 'topt' in kwargs
         report_alignment = 'align' in kwargs
-        nbest = 0 if not 'nbest' in kwargs else int(kwargs['nbest'])
+
+        # how many -if any- entries do we need in the nbest list?
+        nbest = 0
+        if 'nbest' in kwargs:
+            nbest = max(nbest, int(kwargs['nbest']))
+        if 'wpp' in kwargs:
+            nbest = max(nbest, int(kwargs['wpp']))
+
         result = self._translate(q, sg=report_search_graph,
                                  topt = report_translation_options,
                                  align = report_alignment,
@@ -362,11 +371,26 @@ class Root(object):
         if 'align' in result:
             translationDict['alignment'] = result['align']
         if 'nbest' in result:
-            translationDict['raw_nbest'] = result['nbest']
-            translationDict['nbest'] = []
-            for nbest_result in result['nbest']:
-                hyp = nbest_result['hyp']
-                translationDict['nbest'].append(self._getTranslation(hyp))
+            if 'nbest' in kwargs:
+                n = int(kwargs['nbest'])
+                n = min(n, len(result['nbest']))
+                translationDict['raw_nbest'] = result['nbest'][:n]
+                translationDict['nbest'] = []
+                for nbest_result in result['nbest'][:n]:
+                    hyp = nbest_result['hyp']
+                    translationDict['nbest'].append(self._getTranslation(hyp))
+            if 'wpp' in kwargs:
+                buff = []
+                n = int(kwargs['wpp'])
+                n = min(n, len(result['nbest']))
+                for nbest_result in result['nbest'][:n]:
+                    hyp = nbest_result['hyp']
+                    score = nbest_result['totalScore']
+                    buff.append( [0, hyp, score] )
+                word_posterior = wpp.WPP(align=True)
+                probs = word_posterior.process_buff(buff, translation)
+                translationDict['wpp'] = map(math.exp, probs)
+
 
         data = {"data" : {"translations" : [translationDict]}}
         self.log("The server is returning: %s" %self._dump_json(data))
@@ -465,7 +489,7 @@ if __name__ == "__main__":
     parser.add_argument('-tgt-prepro', nargs="+", dest="tgt_prepro", help='complete call to target preprocessing script(s) including arguments, PREPROSTEP(S) 3', default=[])
 
     # Options concerning Confidences
-    parser.add_argument('-nbest-processor', dest='nbest_proc', help="path and arguments for nbest2wpp")
+    #parser.add_argument('-wpp-n', dest='wpp_n', help="length of nbest list to compute wpps from")
 
     # Options to run the Bidirectional Aligner for Online Adaptation
     parser.add_argument('-s2t-hmm', dest='s2t_hmm', help="HMM transition probs from GIZA++")
