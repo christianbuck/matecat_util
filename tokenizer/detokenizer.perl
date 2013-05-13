@@ -16,6 +16,8 @@ my $language = "en";
 my $QUIET = 0;
 my $HELP = 0;
 my $UPPERCASE_SENT = 0;
+my $SKIP_XML = 0;
+my $SKIP_ALL_XML = 0;
 
 while (@ARGV) {
 	$_ = shift;
@@ -24,6 +26,8 @@ while (@ARGV) {
 	/^-q$/ && ($QUIET = 1, next);
 	/^-h$/ && ($HELP = 1, next);
 	/^-u$/ && ($UPPERCASE_SENT = 1, next);
+        /^-x$/ && ($SKIP_XML = 1, next);
+        /^-X$/ && ($SKIP_ALL_XML = 1, next);
 }
 
 if ($HELP) {
@@ -32,6 +36,8 @@ if ($HELP) {
         print "  -u  ... uppercase the first char in the final sentence.\n";
         print "  -q  ... don't report detokenizer revision.\n";
         print "  -b  ... disable Perl buffering.\n";
+        print "  -x  ... keep tags intact.\n";
+        print "  -X  ... keep all tags intact.\n";
 	exit;
 }
 
@@ -42,16 +48,22 @@ if ($language !~ /^(cs|en|fr|it)$/) {
 if (!$QUIET) {
 	print STDERR "Detokenizer Version ".'$Revision: 4134 $'."\n";
 	print STDERR "Language: $language\n";
+        if ($SKIP_ALL_XML) {
+           print STDERR "Skip all XML: $SKIP_ALL_XML\n";
+        }
 }
 
 while(<STDIN>) {
-	if (/^<.+>$/ || /^\s*$/) {
-		#don't try to detokenize XML/HTML tag lines
-		print $_;
-	}
-	else {
-		print &detokenize($_);
-	}
+        if (($SKIP_XML && /^<.+>$/) || /^\s*$/)
+        {
+            #don't try to detokenize XML/HTML tag lines
+            print $_;
+        }
+        else
+        {
+        	print &detokenize($_);
+        }
+
 }
 
 
@@ -80,6 +92,14 @@ sub detokenize {
   $text =~ s/\&#93;/\]/g;   # syntax non-terminal
   $text =~ s/\&amp;/\&/g;   # escape escape
 
+    if ($SKIP_ALL_XML)
+    {
+        # protect inner-tag spaces
+        while ($text =~ /<[^>]*\p{IsSpace}[^>]*>/)
+        {
+            $text =~ s/(<[^>]*)\p{IsSpace}([^>]*>)/$1TAGSPACE$2/g;
+        }
+    }
 	my $word;
 	my $i;
 	my @words = split(/ /,$text);
@@ -176,6 +196,10 @@ sub detokenize {
 	$text =~ s/^ //g;
 	$text =~ s/ $//g;
 	
+    if ($SKIP_ALL_XML)
+    {
+	$text =~ s/TAGSPACE/ /g;
+    }
 	#add trailing break
 	$text .= "\n" unless $text =~ /\n$/;
 
