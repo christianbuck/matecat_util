@@ -37,6 +37,12 @@ def init_log(filename):
     fh.setFormatter(formatter)
     logger.addHandler(fh)
 
+def geometric_mean(log_probs):
+    try:
+        return math.exp(sum(log_probs)) ** (1./len(log_probs))
+    except:
+        return 0
+
 class Filter(object):
     def __init__(self, remove_newlines=True, collapse_spaces=True):
         self.filters = []
@@ -390,6 +396,7 @@ class Root(object):
                 word_posterior = wpp.WPP(align=True)
                 probs = word_posterior.process_buff(buff, translation)
                 translationDict['wpp'] = map(math.exp, probs)
+                translationDict['wpp_score'] = geometric_mean(probs)
 
 
         data = {"data" : {"translations" : [translationDict]}}
