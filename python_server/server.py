@@ -341,10 +341,11 @@ class Root(object):
 
         self.log_info("Request before annotation: %s" %repr(q))
         q = self.external_processors.annotate(q)
-        assert len(preprocessed_src.split()) == len(q.split()), \
+        not_annotated_src = self._getOnlyTranslation(q)
+        assert len(preprocessed_src.split()) == len(not_annotated_src.split()), \
                         "annotation should not change number of tokens"
 
-        self.log_info("Request after annotation: %s" %repr(q))
+        self.log_info("Request after annotation (q): %s" %repr(q))
 
         translation = ''
         report_search_graph = 'sg' in kwargs
