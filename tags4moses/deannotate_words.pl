@@ -81,8 +81,8 @@ while (my $line=<STDIN>){
 	my %endxml = ();
 	my %typexml = ();
 	for (my $i=0; $i < scalar(@tags); $i++){
+		my ($right_blank, $left_blank) = (0,0);
 		my ($idx,$value,$type) = ($tags[$i] =~ /(\-?\d+)\#(.*?)\#(\d+)$/);
-		
 		$value =~ s/\&lt;(.+?)&gt;/$1/;
 		$value =~ /^([^ \t]*)([ \t].+)?$/;
 		my $mainvalue = $1;
@@ -100,13 +100,13 @@ while (my $line=<STDIN>){
                         $xml{$idx} .= "<$value></$mainvalue>";
                         $typexml{$idx} = $type;
                 }elsif ($type == SELF_CONTAINED){
-                        $xml{$idx} .= "<$value />";
+                        $endxml{$idx} .= "<$value />";  #we should find a solution to understand whether the space is present or not in the original tag
                         $typexml{$idx} = $type;
                 }elsif ($type == OPENED_BUT_UNCLOSED){
                         $xml{$idx} .= "<$value>";
                         $typexml{$idx} = $type;
                 }elsif ($type == CLOSED_BUT_UNOPENED){
-                        $xml{$idx} .= "</$mainvalue>";
+                        $endxml{$idx} .= "</$mainvalue>";
                         $typexml{$idx} = $type;
                 }else{
                         die "Third field should have one of the following values: ",join(",",(CONTAINS_NONEMPTY_TEXT,CONTAINS_EMPTY_TEXT,SELF_CONTAINED,OPENED_BUT_UNCLOSED,CLOSED_BUT_UNOPENED,NOTRANSLATE,FORCETRANSLATE)),"\n";
@@ -120,18 +120,29 @@ while (my $line=<STDIN>){
         for (my $i=0; $i < scalar(@tags); $i++){
         	my ($idx,$value,$type) = ($tags[$i] =~ /(\-?\d+)\#(.*?)\#(\d+)$/);
 		if ($idx == -1 && defined($xml{$idx})){
-                        $out = $xml{$idx}.$endxml{$idx}." ";
+                        ##$out = $xml{$idx}.$endxml{$idx}." ";
+                        $out = $xml{$idx}.$endxml{$idx};
 		}
 	}
+
+	print "AFTER tags to NULL: |$out|\n";
 
         for (my $i=0; $i < scalar(@trgwords); $i+=2){
 		my $srcidx = $trgwords[$i+1];
 		if ($srcidx != -1 && defined($xml{$srcidx})){
-                        $out .= $xml{$srcidx}.$trgwords[$i].$endxml{$srcidx}." ";
+                        ##$out .= $xml{$srcidx}.$trgwords[$i].$endxml{$srcidx}." ";
+                        $out .= $xml{$srcidx}.$trgwords[$i].$endxml{$srcidx};
 		}else{
-			$out .= "$trgwords[$i] ";
+			##$out .= "$trgwords[$i] ";
+			$out .= "$trgwords[$i]";
 		}
 	}
+
+	print "AFTER ANNOTATION: |$out|\n";
+
+# removing additional blank tags
+        $out =~ s#</?BLANK_\d+ */?># #gi;
+        print "AFTER _BLANK removal: |$out|\n";
 
 # collapse tags
 	if ($collapse){
@@ -151,13 +162,16 @@ while (my $line=<STDIN>){
 				}
 				else
 				{
-					$newout .= " $2 ";
+					##$newout .= " $2 ";
+					$newout .= "$2";
 				}
 			}
 			$newout .= " $out ";
 			$out = $newout;
 		}
 	}
+
+	print "AFTER COLLAPSE: |$out|\n";
 
 # removing index of tags
         $out =~ s/(<\/?)([^> ]+)_\d+/$1$2/g;
@@ -172,13 +186,15 @@ while (my $line=<STDIN>){
 		$out =~ s/\&quot;/\"/g;
 	}
 
+# adding space before and after each xml tags
+#        $out =~ s/>([^ ])/> $1/g;
+#        $out =~ s/([^ ])</$1 </g;
+#        $out =~ s/>[ ]+</></g;
+
 # removing double spaces and spaces at the beginning and end of the line
-        $out =~ s/>([^ ])/> $1/g;
-        $out =~ s/([^ ])</$1 </g;
         $out =~ s/[ \t]+/ /g;
         $out =~ s/^[ \t]//g;
         $out =~ s/[ \t]$//g;
-        $out =~ s/>[ ]+</></g;
 	if ($printpassthrough){ print "$passthrough"; }
 	print "$out\n";
 }
