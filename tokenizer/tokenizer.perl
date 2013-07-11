@@ -220,8 +220,8 @@ sub tokenize
         # spaces around tags
         while ($text =~ /\P{IsSpace}<[^>]+>/ || $text =~ /<[^>]+>\P{IsSpace}/)
         {
-            $text =~ s/(\P{IsSpace})(<[^>]*>)/$1 $2/g;
-            $text =~ s/(<[^>]*>)(\P{IsSpace})/$1 $2/g;
+            $text =~ s/(\P{IsSpace})(<[^>]*>)/$1 SPACEBEFORETAG $2/g;
+            $text =~ s/(<[^>]*>)(\P{IsSpace})/$1 SPACEAFTERTAG $2/g;
         }
 
         # protect inner-tag spaces
@@ -381,6 +381,9 @@ sub tokenize
 
     #ensure final line break
     $text .= "\n" unless $text =~ /\n$/;
+
+    $text =~ s/\p{IsSpace}SPACEBEFORETAG\p{IsSpace}//g;
+    $text =~ s/\p{IsSpace}SPACEAFTERTAG\p{IsSpace}//g;
 
     return $text;
 }
