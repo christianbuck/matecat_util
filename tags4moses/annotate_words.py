@@ -42,9 +42,9 @@ if __name__ == "__main__":
         words = []
         annotated_words = []
         for idx, word, annotation in parse_line(line):
-          for tag, attr, tag_idx, tag_type in annotation:
+          for tag, attr, tag_idx, tag_type, space_type in annotation:
             t = make_tag(tag, tag_idx, attr)
-            annotated_words.append("%s#%s#%s" %(idx, t, tag_type))
+            annotated_words.append("%s#%s#%s#%s" %(idx, t, tag_type, space_type))
           if word != None and word.strip():
             words.append(word)
           assert (idx+1) == len(words)

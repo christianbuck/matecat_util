@@ -5,6 +5,16 @@ from HTMLParser import HTMLParser
 from collections import defaultdict
 import re
 
+# for a start-and-end tag, the space type assigned to the tag is composed by XY, where X is the spacetype of the start tag, and Y is the spacetype of the end tag; or UNDEFINED, if either X or Y is undefined
+# for a self-contained tag, the space type assigned to the tag is composed by X, where X is the spacetype of the only tag; or UNDEFINED, if X is undefined
+
+class SpaceTypes():
+    UNDEFINED = -1                 # undefined (used for the inner words, but the first, of NONEMPTY tags
+    SPACE_NO = 0                   # ex: the<a>data
+    SPACE_ONLY_BEFORE = 1          # ex: the <a>data
+    SPACE_ONLY_AFTER = 2           # ex: the<a> data
+    SPACE_BEFORE_AND_AFTER = 3     # ex: the <a> data
+
 class TagTypes():
     CONTAINS_NONEMPTY_TEXT = 0     # ex: <a>data</a>
     CONTAINS_EMPTY_TEXT = 1        # ex: <a></a>
@@ -62,13 +72,81 @@ class ResilientParser(HTMLParser):
 		new_ann_data.append( (name, attrs, tag_idx, type) )
             self.annotated_data[idx+1] = new_ann_data	
 
+    def fix_annotation_spaces(self):
+
+        line = self.line
+	ann_data = self.annotated_data[0]
+        new_ann_data = []
+
+        for idx, token in enumerate(self.tokens):
+            ann_data = self.annotated_data[idx]
+            new_ann_data = []
+            for tag in ann_data:
+                tag_idx = tag[2]
+
+		type = tag[3]
+		spacetype_start = SpaceTypes.UNDEFINED
+		spacetype_end = SpaceTypes.UNDEFINED
+		spacetype = SpaceTypes.UNDEFINED
+
+                cased_tag = self.tag_types[tag_idx][0]
+
+                pattern1 = "([^\s]|^)<"+cased_tag+"[^>]*>([^\s]|$)"
+                pattern2 = "(\s)<"+cased_tag+"[^>]*>([^\s]|$)"
+                pattern3 = "([^\s]|^)<"+cased_tag+"[^>]*>(\s)"
+                pattern4 = "(\s)<"+cased_tag+"[^>]*>(\s)"
+		if re.search(pattern1, line) :
+		        spacetype_start = SpaceTypes.SPACE_NO
+			line = re.sub(pattern1, "\g<1>\g<2>", line, 1)
+		elif re.search(pattern2, line) :
+			spacetype_start = SpaceTypes.SPACE_ONLY_BEFORE
+			line = re.sub(pattern2, "\g<1>\g<2>", line, 1)
+		elif re.search(pattern3, line) :
+			spacetype_start = SpaceTypes.SPACE_ONLY_AFTER
+			line = re.sub(pattern3, "\g<1>\g<2>", line, 1)
+		elif re.search(pattern4, line) :
+			spacetype_start = SpaceTypes.SPACE_BEFORE_AND_AFTER
+			line = re.sub(pattern4, "\g<1>\g<2>", line, 1)
+		if spacetype_start != SpaceTypes.UNDEFINED :
+			spacetype_start = spacetype_start
+
+		if type == TagTypes.CONTAINS_NONEMPTY_TEXT or type == TagTypes.CONTAINS_EMPTY_TEXT : 
+                	pattern1 = "([^\s]|^)<\/"+cased_tag+"[^>]*>([^\s]|$)"
+                	pattern2 = "(\s)</"+cased_tag+"[^>]*>([^\s]|$)"
+                	pattern3 = "([^\s]|^)</"+cased_tag+"[^>]*>(\s)"
+                	pattern4 = "(\s)</"+cased_tag+"[^>]*>(\s)"
+                	if re.search(pattern1, line) :
+                	        spacetype_end = SpaceTypes.SPACE_NO
+			        line = re.sub(pattern1, "\g<1>\g<2>", line)
+                	if re.search(pattern2, line) :
+                        	spacetype_end = SpaceTypes.SPACE_ONLY_BEFORE
+			        line = re.sub(pattern2, "\g<1>\g<2>", line)
+                	if re.search(pattern3, line) :
+                        	spacetype_end = SpaceTypes.SPACE_ONLY_AFTER
+			        line = re.sub(pattern3, "\g<1>\g<2>", line)
+                	if re.search(pattern4, line) :
+                	        spacetype_end = SpaceTypes.SPACE_BEFORE_AND_AFTER
+			        line = re.sub(pattern4, "\g<1>\g<2>", line)
+			if spacetype_start == SpaceTypes.UNDEFINED or spacetype_end == SpaceTypes.UNDEFINED:
+				spacetype = SpaceTypes.UNDEFINED
+			else:
+				spacetype = 10*spacetype_start + spacetype_end
+		else:
+			spacetype = spacetype_start
+					
+                new_ann_data.append( (tag[0], tag[1], tag[2], tag[3], spacetype) ) 
+            self.annotated_data[idx] = new_ann_data
+
+
     def process(self, line):
         self.reset()
+	self.line = line
         self.feed(line)
         self.start_second_pass()
         self.feed(line)
         assert not self.stack
         self.fix_annotation()
+        self.fix_annotation_spaces()
         return self.annotated_data, self.tokens
 
     def get_cased_start_tag(self, expected_tag=None):
@@ -86,9 +164,11 @@ class ResilientParser(HTMLParser):
 
     def handle_starttag(self, tag, attrs):
         cased_tag = self.get_cased_start_tag(tag)
+
         assert cased_tag != None
         self.tag_idx += 1
         self.stack.append( (cased_tag, attrs, self.tag_idx) )
+
         if self.first_pass:
             # initially assume that tag is properly closed but contains no text
             self.tag_types[self.tag_idx] = (cased_tag, TagTypes.CONTAINS_EMPTY_TEXT)
@@ -132,7 +212,6 @@ class ResilientParser(HTMLParser):
             assert cased_tag != None
             self.tag_types[self.tag_idx] = (cased_tag, TagTypes.SELF_CONTAINED)
         else:
-            #print tag, self.get_starttag_text()
             assert self.tag_types[self.tag_idx][1] == TagTypes.SELF_CONTAINED
             assert self.tag_types[self.tag_idx][0].lower() == tag
             cased_tag = self.tag_types[self.tag_idx][0]
@@ -154,8 +233,7 @@ class ResilientParser(HTMLParser):
               # 2. fix by opening and close immediately
               else:
                   self.tag_idx += 1
-                  self.tag_types[self.tag_idx] = (tag,
-                                                  TagTypes.CLOSED_BUT_UNOPENED)
+                  self.tag_types[self.tag_idx] = (tag, TagTypes.CLOSED_BUT_UNOPENED)
             else:
                 assert self.stack
                 assert self.stack[-1][0] == tag

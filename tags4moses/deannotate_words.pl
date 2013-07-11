@@ -2,6 +2,12 @@
 
 #map taken from resilientparser.py
 
+use constant     SPACE_UNDEFINED => -1;           # undefined (used for the inner words, but the first, of NONEMPTY tags
+use constant     SPACE_NO => 0;                   # ex: the<a>data
+use constant     SPACE_ONLY_BEFORE => 1;          # ex: the <a>data
+use constant     SPACE_ONLY_AFTER => 2;           # ex: the<a> data
+use constant     SPACE_BEFORE_AND_AFTER => 3;     # ex: the <a> data
+
 use constant CONTAINS_NONEMPTY_TEXT => 0;
 use constant CONTAINS_EMPTY_TEXT => 1;
 use constant SELF_CONTAINED => 2;
@@ -69,7 +75,7 @@ while (my $line=<STDIN>){
 
 #parsing translation
 	my @trgwords = split (/[ \t]+/, $trans);
-	# eve entries contain words, eodd entries contain word-alignemnt
+	# even entries contain words, odd entries contain word-alignemnt
 	for (my $i=0; $i < scalar(@trgwords); $i+=2){
 		$trgwords[$i+1] =~ s/\|//g; #remove pipeline from word alignemnt
 	}
@@ -81,32 +87,58 @@ while (my $line=<STDIN>){
 	my %endxml = ();
 	my %typexml = ();
 	for (my $i=0; $i < scalar(@tags); $i++){
-		my ($idx,$value,$type) = ($tags[$i] =~ /(\-?\d+)\#(.*?)\#(\d+)$/);
-		
+		my ($idx,$value,$type,$spacetype) = ($tags[$i] =~ /(\-?\d+)\#(.*?)\#(\d+)\#(\-?\d+)$/);
+	
 		$value =~ s/\&lt;(.+?)&gt;/$1/;
 		$value =~ /^([^ \t]*)([ \t].+)?$/;
 		my $mainvalue = $1;
 
+		my ($start_space_left, $start_space_right, $end_space_left, $end_space_right) = ("","","","");
  		if (!defined($xml{$idx})){
 			$xml{$idx} = "";	
 			$endxml{$idx} = "";	
 			$typexml{$idx} = "";	
 		}
+
+		if ($spacetype != SPACE_UNDEFINED){
+			my $s = $spacetype;
+			#print "spacetype=$spacetype\n";
+			if ($type == CONTAINS_NONEMPTY_TEXT || $type == CONTAINS_EMPTY_TEXT ){
+				my $e = $spacetype % 10;
+                                if ( $e == SPACE_BEFORE_AND_AFTER ){
+                                        $end_space_left = $end_space_right = " ";
+                                }elsif ( $e == SPACE_ONLY_BEFORE ){
+                                        $end_space_left = " ";
+                                }elsif ( $e == SPACE_ONLY_AFTER ){
+                                        $end_space_right = " ";
+				}			
+				$s = int($spacetype / 10);
+			}
+			
+                        if ( $s == SPACE_BEFORE_AND_AFTER ){
+                        	$start_space_left = $start_space_right = " ";
+                        }elsif ($s == SPACE_ONLY_BEFORE ){
+                        	$start_space_left = " ";
+                        }elsif ($s == SPACE_ONLY_AFTER ){
+                                $start_space_right = " ";
+                        }
+		}
+
 		if ($type == CONTAINS_NONEMPTY_TEXT  || $type == NOTRANSLATE || $type == FORCETRANSLATE ){
-                        $xml{$idx} .= "<$value>";
-                        $endxml{$idx} = "</$mainvalue>$endxml{$idx}";
+                        $xml{$idx} .= "${start_space_left}<$value>${start_space_right}";
+                        $endxml{$idx} = "${end_space_left}</$mainvalue>${end_space_right}$endxml{$idx}";
 			$typexml{$idx} = $type;	
                 }elsif ($type == CONTAINS_EMPTY_TEXT){
-                        $xml{$idx} .= "<$value></$mainvalue>";
+                        $xml{$idx} .= "${start_space_left}<$value>${start_space_right}${end_space_left}</$mainvalue>${end_space_right}";
                         $typexml{$idx} = $type;
                 }elsif ($type == SELF_CONTAINED){
-                        $xml{$idx} .= "<$value />";
+                        $endxml{$idx} .= "${start_space_left}<$value />${start_space_right}";
                         $typexml{$idx} = $type;
                 }elsif ($type == OPENED_BUT_UNCLOSED){
-                        $xml{$idx} .= "<$value>";
+                        $xml{$idx} .= "${start_space_left}<$value>${start_space_right}";
                         $typexml{$idx} = $type;
                 }elsif ($type == CLOSED_BUT_UNOPENED){
-                        $xml{$idx} .= "</$mainvalue>";
+                        $xml{$idx} .= "${start_space_left}</$mainvalue>${start_space_right}";
                         $typexml{$idx} = $type;
                 }else{
                         die "Third field should have one of the following values: ",join(",",(CONTAINS_NONEMPTY_TEXT,CONTAINS_EMPTY_TEXT,SELF_CONTAINED,OPENED_BUT_UNCLOSED,CLOSED_BUT_UNOPENED,NOTRANSLATE,FORCETRANSLATE)),"\n";
@@ -118,16 +150,16 @@ while (my $line=<STDIN>){
 
 	#adding tags not associated to any source word
         for (my $i=0; $i < scalar(@tags); $i++){
-        	my ($idx,$value,$type) = ($tags[$i] =~ /(\-?\d+)\#(.*?)\#(\d+)$/);
+		my ($idx,$value,$type,$spacetype) = ($tags[$i] =~ /(\-?\d+)\#(.*?)\#(\d+)\#(\-?\d+)$/);
 		if ($idx == -1 && defined($xml{$idx})){
-                        $out = $xml{$idx}.$endxml{$idx}." ";
+                        $out = $xml{$idx}.$endxml{$idx};
 		}
 	}
 
         for (my $i=0; $i < scalar(@trgwords); $i+=2){
 		my $srcidx = $trgwords[$i+1];
 		if ($srcidx != -1 && defined($xml{$srcidx})){
-                        $out .= $xml{$srcidx}.$trgwords[$i].$endxml{$srcidx}." ";
+                        $out .= $xml{$srcidx}.$trgwords[$i].$endxml{$srcidx};
 		}else{
 			$out .= "$trgwords[$i] ";
 		}
@@ -173,8 +205,6 @@ while (my $line=<STDIN>){
 	}
 
 # removing double spaces and spaces at the beginning and end of the line
-        $out =~ s/>([^ ])/> $1/g;
-        $out =~ s/([^ ])</$1 </g;
         $out =~ s/[ \t]+/ /g;
         $out =~ s/^[ \t]//g;
         $out =~ s/[ \t]$//g;
