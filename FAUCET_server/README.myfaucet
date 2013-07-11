@@ -1,0 +1,11 @@
+EXE=/path/to/IRSTLM/bin/compile-lm
+PAR="--sentence=yes --eval=/dev/stdin"
+
+MODEL_src=/path/to/word/based/source/lm
+MODEL_trg=/path/to/word/based/target/lm
+MODEL_trgpos=/path/to/POS/based/target/lm
+
+perl myFaucet.pl -d 9887 $EXE $MODEL_src $PAR >& log.lm_src &
+perl myFaucet.pl -d 9888 $EXE $MODEL_trg $PAR >& log.lm_trg &
+perl myFaucet.pl -d 9889 $EXE $MODEL_trgpos $PAR >& log.lm_trgpos &
+
