@@ -345,19 +345,24 @@ class Root(object):
         return query
 
     def _get_sentence_confidence(self, id, source, target):
-        ##if not self.persist or not hasattr(cherrypy.thread_data, 'sentence_confidence'):
-        if not hasattr(cherrypy.thread_data, 'sentence_confidence'):
+        ## force sentence_confidence to be persistent
+        if not self.persist or not hasattr(cherrypy.thread_data, 'sentence_confidence'):
             if hasattr(cherrypy.thread_data, 'sentence_confidence'):
                 map(pclose, cherrypy.thread_data.sentence_confidence)
             cherrypy.thread_data.sentence_confidence = map(popen, self.sentence_confidence_cmd)
+
+        pattern = "<seg id=\".*?\">(?P<key>.+?)<\/seg>"
+        re_match = re.compile(pattern)
+
+        input = "<seg id=\""+id+"\"><src>"+source+"</src><trg>"+target+"</trg></seg>"
+        output = input
         for proc in cherrypy.thread_data.sentence_confidence:
-	    input = ""
-	    input = "<seg id=\""+id+"\">"
-	    input = input+"<src>"+source+"</src>"
-	    input = input+"<trg>"+target+"</trg>"
-	    input = "</seg>"
-            output = self._pipe(proc, input)
-        return output
+            output = self._pipe(proc, output)
+
+        m = re_match.search(output)
+        value = m.group('key')
+        
+        return value
 
     def _updater_source_prepro(self, query):
         if not self.persist or not hasattr(cherrypy.thread_data, 'updater_source_prepro'):

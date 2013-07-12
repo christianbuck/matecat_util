@@ -307,9 +307,6 @@ class Root(object):
 
     def _get_sentence_confidence(self, id, source, target):
 	## force sentence_confidence to be persistent
-##        if not hasattr(cherrypy.thread_data, 'sentence_confidence'):
-##            cherrypy.thread_data.sentence_confidence = map(popen, self.sentence_confidence_cmd)
-
         if not self.persist or not hasattr(cherrypy.thread_data, 'sentence_confidence'):
             if hasattr(cherrypy.thread_data, 'sentence_confidence'):
                 map(pclose, cherrypy.thread_data.sentence_confidence)
@@ -317,18 +314,16 @@ class Root(object):
 
         pattern = "<seg id=\".*?\">(?P<key>.+?)<\/seg>"
         re_match = re.compile(pattern)
+
+        input = "<seg id=\""+id+"\"><src>"+source+"</src><trg>"+target+"</trg></seg>"
+        output = input
         for proc in cherrypy.thread_data.sentence_confidence:
-            input = ""
-            input = "<seg id=\""+id+"\">"
-            input = input+"<src>"+source+"</src>"
-            input = input+"<trg>"+target+"</trg>"
-            input = input+"</seg>"
-            output = self._pipe(proc, input)
+            output = self._pipe(proc, output)
 
-            m = re_match.search(output)
-	    value = m.group('key')
+        m = re_match.search(output)
+        value = m.group('key')
+
         return value
-
 
     def _cleanMosesPhraseAlignemnt(self, query):
         pattern = " *\|\d+\-\d+\|"
