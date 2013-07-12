@@ -327,10 +327,10 @@ class Root(object):
             output = self._pipe(proc, input)
 
     	    self.log("_get_sentence_confidence output: %s" % (output))
-            output = re_match.sub('',output)
-
-    	    self.log("_get_sentence_confidence value: %s" % (output))
-        return output
+            m = re_match.search(output)
+	    value = m.group('key')
+    	    self.log("_get_sentence_confidence value: %s" % (value))
+        return value
 
 
     def _cleanMosesPhraseAlignemnt(self, query):
