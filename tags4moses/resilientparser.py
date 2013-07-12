@@ -14,6 +14,7 @@ class SpaceTypes():
     SPACE_ONLY_BEFORE = 1          # ex: the <a>data
     SPACE_ONLY_AFTER = 2           # ex: the<a> data
     SPACE_BEFORE_AND_AFTER = 3     # ex: the <a> data
+    SPACE_INTERNAL = 100             # ex: <a /> used only for self_contained tags
 
 class TagTypes():
     CONTAINS_NONEMPTY_TEXT = 0     # ex: <a>data</a>
@@ -87,9 +88,15 @@ class ResilientParser(HTMLParser):
 		type = tag[3]
 		spacetype_start = SpaceTypes.UNDEFINED
 		spacetype_end = SpaceTypes.UNDEFINED
+		spacetype_internal = 0
 		spacetype = SpaceTypes.UNDEFINED
 
                 cased_tag = self.tag_types[tag_idx][0]
+
+                if type == TagTypes.SELF_CONTAINED :
+                        pattern = "<"+cased_tag+"[^>]*(\s+)\/>"
+                        if re.search(pattern, line) :
+                                spacetype_internal = SpaceTypes.SPACE_INTERNAL
 
                 pattern1 = "([^\s]|^)<"+cased_tag+"[^>]*>([^\s]|$)"
                 pattern2 = "(\s)<"+cased_tag+"[^>]*>([^\s]|$)"
@@ -133,6 +140,7 @@ class ResilientParser(HTMLParser):
 				spacetype = 10*spacetype_start + spacetype_end
 		else:
 			spacetype = spacetype_start
+		spacetype += spacetype_internal
 					
                 new_ann_data.append( (tag[0], tag[1], tag[2], tag[3], spacetype) ) 
             self.annotated_data[idx] = new_ann_data
@@ -212,12 +220,12 @@ class ResilientParser(HTMLParser):
             assert cased_tag != None
             self.tag_types[self.tag_idx] = (cased_tag, TagTypes.SELF_CONTAINED)
         else:
-            assert self.tag_types[self.tag_idx][1] == TagTypes.SELF_CONTAINED
+            tag_type = self.tag_types[self.tag_idx][1]
+            assert tag_type == TagTypes.SELF_CONTAINED or tag_type == TagTypes.SELF_CONTAINED_WS
             assert self.tag_types[self.tag_idx][0].lower() == tag
             cased_tag = self.tag_types[self.tag_idx][0]
             assert cased_tag != None
-            self.annotated_data[self.token_idx].append(
-                (cased_tag, attrs, self.tag_idx, TagTypes.SELF_CONTAINED) )
+            self.annotated_data[self.token_idx].append( (cased_tag, attrs, self.tag_idx, tag_type) )
 
     def handle_endtag(self, tag):
         if self.first_pass:

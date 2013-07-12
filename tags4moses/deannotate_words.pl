@@ -7,6 +7,7 @@ use constant     SPACE_NO => 0;                   # ex: the<a>data
 use constant     SPACE_ONLY_BEFORE => 1;          # ex: the <a>data
 use constant     SPACE_ONLY_AFTER => 2;           # ex: the<a> data
 use constant     SPACE_BEFORE_AND_AFTER => 3;     # ex: the <a> data
+use constant     SPACE_INTERNAL => 100;           # ex: <a />  (used only for self_contained tag
 
 use constant CONTAINS_NONEMPTY_TEXT => 0;
 use constant CONTAINS_EMPTY_TEXT => 1;
@@ -93,7 +94,7 @@ while (my $line=<STDIN>){
 		$value =~ /^([^ \t]*)([ \t].+)?$/;
 		my $mainvalue = $1;
 
-		my ($start_space_left, $start_space_right, $end_space_left, $end_space_right) = ("","","","");
+		my ($start_space_left, $start_space_right, $end_space_left, $end_space_right, $self_space_internal) = ("","","","","");
  		if (!defined($xml{$idx})){
 			$xml{$idx} = "";	
 			$endxml{$idx} = "";	
@@ -102,7 +103,12 @@ while (my $line=<STDIN>){
 
 		if ($spacetype != SPACE_UNDEFINED){
 			my $s = $spacetype;
-			#print "spacetype=$spacetype\n";
+			if ($spacetype >= SPACE_INTERNAL){
+				if ($type == SELF_CONTAINED ){
+					$self_space_internal = " ";	
+				}
+				$spacetype = $spacetype - SPACE_INTERNAL;
+			}
 			if ($type == CONTAINS_NONEMPTY_TEXT || $type == CONTAINS_EMPTY_TEXT ){
 				my $e = $spacetype % 10;
                                 if ( $e == SPACE_BEFORE_AND_AFTER ){
@@ -132,7 +138,7 @@ while (my $line=<STDIN>){
                         $xml{$idx} .= "${start_space_left}<$value>${start_space_right}${end_space_left}</$mainvalue>${end_space_right}";
                         $typexml{$idx} = $type;
                 }elsif ($type == SELF_CONTAINED){
-                        $endxml{$idx} .= "${start_space_left}<$value />${start_space_right}";
+                        $endxml{$idx} .= "${start_space_left}<$value${self_space_internal}/>${start_space_right}";
                         $typexml{$idx} = $type;
                 }elsif ($type == OPENED_BUT_UNCLOSED){
                         $xml{$idx} .= "${start_space_left}<$value>${start_space_right}";
