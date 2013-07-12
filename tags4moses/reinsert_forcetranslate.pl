@@ -71,7 +71,8 @@ while (my $line=<STDIN>){
 	my %endxml = ();
 	my %typexml = ();
 	for (my $i=0; $i < scalar(@tags); $i++){
-		my ($idx,$value,$type) = ($tags[$i] =~ /(\d+)\#(.*?)\#(\d+)$/);
+		#my ($idx,$value,$type) = ($tags[$i] =~ /(\d+)\#(.*?)\#(\d+)$/);
+		my ($idx,$value,$typei,$spacetype) = ($tags[$i] =~ /(\d+)\#(.*?)\#(\d+)\#(\-?\d+)$/);
 
 		$value =~ s/\&lt;(.+?)&gt;/$1/;
 		$value =~ /^([^ \t]*)([ \t].+)?$/;
