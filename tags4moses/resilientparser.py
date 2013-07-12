@@ -124,16 +124,16 @@ class ResilientParser(HTMLParser):
                 	pattern4 = "(\s)</"+cased_tag+"[^>]*>(\s)"
                 	if re.search(pattern1, line) :
                 	        spacetype_end = SpaceTypes.SPACE_NO
-			        line = re.sub(pattern1, "\g<1>\g<2>", line)
+			        line = re.sub(pattern1, "\g<1>\g<2>", line, 1)
                 	if re.search(pattern2, line) :
                         	spacetype_end = SpaceTypes.SPACE_ONLY_BEFORE
-			        line = re.sub(pattern2, "\g<1>\g<2>", line)
+			        line = re.sub(pattern2, "\g<1>\g<2>", line, 1)
                 	if re.search(pattern3, line) :
                         	spacetype_end = SpaceTypes.SPACE_ONLY_AFTER
-			        line = re.sub(pattern3, "\g<1>\g<2>", line)
+			        line = re.sub(pattern3, "\g<1>\g<2>", line, 1)
                 	if re.search(pattern4, line) :
                 	        spacetype_end = SpaceTypes.SPACE_BEFORE_AND_AFTER
-			        line = re.sub(pattern4, "\g<1>\g<2>", line)
+			        line = re.sub(pattern4, "\g<1>\g<2>", line, 1)
 			if spacetype_start == SpaceTypes.UNDEFINED or spacetype_end == SpaceTypes.UNDEFINED:
 				spacetype = SpaceTypes.UNDEFINED
 			else:
@@ -141,7 +141,15 @@ class ResilientParser(HTMLParser):
 		else:
 			spacetype = spacetype_start
 		spacetype += spacetype_internal
-					
+
+		if idx > 0 :
+	            prev_ann_data = self.annotated_data[idx-1]
+	            for prev_tag in prev_ann_data:
+	                prev_tag_idx = prev_tag[2]
+			if tag_idx == prev_tag_idx :
+	                    prev_spacetype = prev_tag[4]
+			    spacetype = prev_spacetype
+	
                 new_ann_data.append( (tag[0], tag[1], tag[2], tag[3], spacetype) ) 
             self.annotated_data[idx] = new_ann_data
 
