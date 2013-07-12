@@ -56,8 +56,6 @@ exe="$exe -persist"
 
 #parameters for Sentence-Level confidence estimation
 
-#parameters for Sentence-Level confidence estimation
-
 sentenceconfidence_configdir="${QE_MODELS}"
 sentenceconfidence_jarfile="$softwaredir/code/QualityEstimation/QEModule.jar"
 sentenceconfidence_tmpdir="$softwaredir/code/QualityEstimation/TestFolder"
