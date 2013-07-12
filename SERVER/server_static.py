@@ -323,13 +323,10 @@ class Root(object):
             input = input+"<src>"+source+"</src>"
             input = input+"<trg>"+target+"</trg>"
             input = input+"</seg>"
-    	    self.log("_get_sentence_confidence input: %s" % (input))
             output = self._pipe(proc, input)
 
-    	    self.log("_get_sentence_confidence output: %s" % (output))
             m = re_match.search(output)
 	    value = m.group('key')
-    	    self.log("_get_sentence_confidence value: %s" % (value))
         return value
 
 
