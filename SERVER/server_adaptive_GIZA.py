@@ -371,13 +371,16 @@ class Root(object):
                 map(pclose, cherrypy.thread_data.sentence_confidence)
             cherrypy.thread_data.sentence_confidence = map(popen, self.sentence_confidence_cmd)
         for proc in cherrypy.thread_data.sentence_confidence:
-	    input = ""
-	    input = "<seg id=\""+id+"\">"
-	    input = input+"<src>"+source+"</src>"
-	    input = input+"<trg>"+target+"</trg>"
-	    input = "</seg>"
+            input = ""
+            input = "<seg id=\""+id+"\">"
+            input = input+"<src>"+source+"</src>"
+            input = input+"<trg>"+target+"</trg>"
+            input = input+"</seg>"
             output = self._pipe(proc, input)
-        return output
+
+            m = re_match.search(output)
+            value = m.group('key')
+        return value
 
     def _updater_source_prepro(self, query):
         if not self.persist or not hasattr(cherrypy.thread_data, 'updater_source_prepro'):
