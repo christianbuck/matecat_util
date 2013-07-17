@@ -2,7 +2,7 @@
 import sys, logging, os
 import codecs, subprocess, select, re, logging
 from decoder import Decoder_Moses, Decoder_Deterministic 
-from aligner import Aligner_GIZA, Aligner_Constrained_Search, Aligner_IBM1, Aligner_Dummy
+from aligner import Aligner_GIZA, Aligner_onlineGIZA, Aligner_Constrained_Search, Aligner_IBM1, Aligner_Dummy
 from phrase_extractor import Extractor_Moses, Extractor_Constrained_Search, Extractor_Dummy
 from annotate import Annotator_onlinexml, Annotator_onlinecache
 
@@ -44,6 +44,8 @@ if __name__ == "__main__":
 	
         if aligner_type == "GIZA" :
         	Aligner_object = Aligner_GIZA(parser)
+        elif aligner_type == "onlineGIZA" :
+                Aligner_object = Aligner_onlineGIZA(parser)
         elif aligner_type == "Constrained_Search" :
         	Aligner_object = Aligner_Constrained_Search(parser)
 		if not decoder_type == "Moses":

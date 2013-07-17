@@ -10,13 +10,21 @@ from ConfigParser import SafeConfigParser
 
 logging.basicConfig(level=logging.INFO)
 
+def append_to_file(fn, output):
+        """
+        Write output to file named fn.
+        """
+        f = open(fn, 'a')
+        f.write(output)
+        f.close()
+
 def write_to_file(fn, output):
-	"""
-	Write output to file named fn.
-	"""
-	f = open(fn, 'w')
-	f.write(output)
-	f.close()
+        """
+        Write output to file named fn.
+        """
+        f = open(fn, 'w')
+        f.write(output)
+        f.close()
 
 def read_file(fn):
         """
@@ -78,6 +86,136 @@ class Aligner_Constrained_Search:
                 os.remove(crt_file), os.remove(opt_file)
                 return alignment.strip()
 
+class Aligner_onlineGIZA:
+        """
+        Handles constrained search with external scripts.
+        """
+        def __init__(self, parser):
+                self.parser = parser
+                self.s2tcfg = parser.get('annotation', 'src-trg-gizacfg')
+                self.t2scfg = parser.get('annotation', 'trg-src-gizacfg')
+                try:
+                        parser.get('annotation', 'sym-align-type')
+                except:
+                        parser.set('annotation', 'sym-align-type', '-a=intersection -d=no -b=no -f=no')
+                try:
+                        parser.get('annotation', 'giza-options')
+                except:
+                        parser.set('annotation', 'giza-options', '-m1 1 -m2 0 -m3 0 -m4 0 -m5 0 -mh 0 -restart 1')
+                try:
+                        self.path = parser.get('tools', 'mgiza_path')
+                except:
+                        self.path = None
+
+                self.symtype = parser.get('annotation', 'sym-align-type')
+                self.gizaoptions = parser.get('annotation', 'giza-options')
+                self.tmpdir = parser.get('env', 'tmp')
+
+
+                self.parameters_s2t = self.s2tcfg+" " + self.gizaoptions + " -onlineMode 1"
+                self.parameters_t2s = self.t2scfg+" " + self.gizaoptions + " -onlineMode 1"
+
+		self.giza2bal = self.path + "/scripts/giza2bal.pl"
+		self.symal = self.path + "/bin/symal"
+		self.mgiza = self.path + "/bin/mgiza"
+
+### CHECK WHETHER commands are available 
+##### ............... TODO ...............
+
+		self.err_signal_pattern = re.compile("^Alignment took [0-9]+ seconds")
+
+		#self.FNULL = open(os.devnull, 'w')
+		#self.log_s2t = open("LLL_s2t", 'w')
+		self.log_s2t = open(os.devnull, 'w')
+		#self.log_t2s = open("LLL_t2s", 'w')
+		self.log_t2s = open(os.devnull, 'w')
+                logging.info("MGIZA_CALL:|"+self.mgiza+' '+self.parameters_s2t+"|")
+                self.aligner_s2t = subprocess.Popen([self.mgiza]+self.parameters_s2t.split(),
+                        stdin=subprocess.PIPE,
+                        stdout=subprocess.PIPE,
+                        stderr=self.log_s2t,
+                        shell=False)
+                logging.info("MGIZA_CALL:|"+self.mgiza+' '+self.parameters_t2s+"|")
+                self.aligner_t2s = subprocess.Popen([self.mgiza]+self.parameters_t2s.split(),
+                        stdin=subprocess.PIPE,
+                        stdout=subprocess.PIPE,
+                        stderr=self.log_t2s,
+                        shell=False)
+
+        def align(self, source="", target="", correction="", moses_translation_options=""):
+		err = []
+                logging.info("SEARCHER source:"+source)
+                logging.info("SEARCHER correction:"+correction)
+                # write target and source to a proper string 
+                #aligner_input_src2trg = source + "{#}" + correction
+                #aligner_input_trg2src = correction + "{#}" + source
+                aligner_input_src2trg = "<src>" + source + "</src><trg>" + correction + "</trg>"
+                aligner_input_trg2src = "<src>" + correction + "</src><trg>" + source + "</trg>"
+		aligner_input_src2trg = aligner_input_src2trg.lower()
+		aligner_input_trg2src = aligner_input_trg2src.lower()
+
+#Source-Target		
+                logging.info("ALIGNER input:"+aligner_input_src2trg)
+                logging.info("ALIGNER input:"+aligner_input_trg2src)
+                self.aligner_s2t.stdin.write(aligner_input_src2trg+'\n')
+		self.aligner_s2t.stdout.flush()
+
+                sentence_id = self.aligner_s2t.stdout.readline().strip()
+                target_str = self.aligner_s2t.stdout.readline().strip()
+                align_src2trg = self.aligner_s2t.stdout.readline().strip()
+
+                align_src2trg_file = self.tmpdir+"/_s2t"+str(os.getpid())
+                append_to_file(align_src2trg_file, sentence_id+'\n')
+                append_to_file(align_src2trg_file, correction+'\n')
+                append_to_file(align_src2trg_file, align_src2trg+'\n')
+
+#Target-Source		
+                self.aligner_t2s.stdin.write(aligner_input_trg2src+'\n')
+		self.aligner_t2s.stdout.flush()
+
+                sentence_id = self.aligner_t2s.stdout.readline().strip()
+                source_str = self.aligner_t2s.stdout.readline().strip()
+                align_trg2src = self.aligner_t2s.stdout.readline().strip()
+
+                align_trg2src_file = self.tmpdir+"/_t2s"+str(os.getpid())
+                append_to_file(align_trg2src_file, sentence_id+'\n')
+                append_to_file(align_trg2src_file, source+'\n')
+                append_to_file(align_trg2src_file, align_trg2src+'\n')
+
+#create the giza2bal 
+	        giza2bal_options = "-d " + align_src2trg_file + " -i " + align_trg2src_file
+                giza2bal_proc = subprocess.Popen([self.giza2bal]+ giza2bal_options.split(),  stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+		giza2bal_align1 = giza2bal_proc.stdout.readline().strip()
+		giza2bal_align2 = giza2bal_proc.stdout.readline().strip()
+		giza2bal_align3 = giza2bal_proc.stdout.readline().strip()
+                logging.info("GIZA2BAL s2t:|"+giza2bal_align2+"|")
+                logging.info("GIZA2BAL t2s:|"+giza2bal_align3+"|")
+
+
+#symmetrize the alignments
+                logging.info("SYMAL_CALL:|"+self.symal+' '+self.symtype+"|")
+                #logging.info("giza2bal_align1:|"+giza2bal_align1+"|")
+                #logging.info("giza2bal_align2:|"+giza2bal_align2+"|")
+                #logging.info("giza2bal_align3:|"+giza2bal_align3+"|")
+                symal_proc = subprocess.Popen([self.symal]+self.symtype.split(),  stdin=subprocess.PIPE,  stdout=subprocess.PIPE)
+
+		symal_proc.stdin.write(giza2bal_align1+'\n')
+		symal_proc.stdin.write(giza2bal_align2+'\n')
+		symal_proc.stdin.write(giza2bal_align3+'\n')
+
+	
+                alignment = symal_proc.stdout.readline().strip()
+                logging.info("SYMAL_OUT: "+alignment.strip())
+
+# remove source and target strings	
+		alignment = re.sub("^.+{##}[ \t]*",'',alignment)
+                logging.info("SYMAL_OUT after string replacement: "+alignment.strip())
+
+                # remove temporary files
+                os.remove(align_src2trg_file), os.remove(align_trg2src_file)
+                return alignment.strip()
+
+
 class Aligner_GIZA:
 	"""
 	Handles constrained search with external scripts.
@@ -91,7 +229,6 @@ class Aligner_GIZA:
                         parser.get('annotation', 'sym-align-type')
                 except:
                         parser.set('annotation', 'sym-align-type', 'intersection')
-                self.symtype = parser.get('annotation', 'sym-align-type')
                 try:
                         parser.get('annotation', 'models-iterations')
                 except:
@@ -101,6 +238,7 @@ class Aligner_GIZA:
 		except:
 			self.mgiza = None
 			
+                self.symtype = parser.get('annotation', 'sym-align-type')
                 self.modeliter = parser.get('annotation', 'models-iterations')
                 self.tmpdir = parser.get('env', 'tmp')
 
