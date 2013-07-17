@@ -147,10 +147,8 @@ class Aligner_onlineGIZA:
                 logging.info("SEARCHER source:"+source)
                 logging.info("SEARCHER correction:"+correction)
                 # write target and source to a proper string 
-                #aligner_input_src2trg = source + "{#}" + correction
-                #aligner_input_trg2src = correction + "{#}" + source
-                aligner_input_src2trg = "<src>" + source + "</src><trg>" + correction + "</trg>"
-                aligner_input_trg2src = "<src>" + correction + "</src><trg>" + source + "</trg>"
+                aligner_input_src2trg = "<src>" + correction + "</src><trg>" + source + "</trg>"
+                aligner_input_trg2src = "<src>" + source + "</src><trg>" + correction + "</trg>"
 		aligner_input_src2trg = aligner_input_src2trg.lower()
 		aligner_input_trg2src = aligner_input_trg2src.lower()
 
@@ -194,9 +192,6 @@ class Aligner_onlineGIZA:
 
 #symmetrize the alignments
                 logging.info("SYMAL_CALL:|"+self.symal+' '+self.symtype+"|")
-                #logging.info("giza2bal_align1:|"+giza2bal_align1+"|")
-                #logging.info("giza2bal_align2:|"+giza2bal_align2+"|")
-                #logging.info("giza2bal_align3:|"+giza2bal_align3+"|")
                 symal_proc = subprocess.Popen([self.symal]+self.symtype.split(),  stdin=subprocess.PIPE,  stdout=subprocess.PIPE)
 
 		symal_proc.stdin.write(giza2bal_align1+'\n')
