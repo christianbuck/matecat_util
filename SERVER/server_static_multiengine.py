@@ -159,7 +159,7 @@ class Root(object):
     def __init__(self, moses, updater_config=None, prepro_cmd=None, postpro_cmd=None,
         	 sentence_confidence_cmd=None,
 		 slang=None, tlang=None, pretty=False, persistent_processes=False,
-		 segid_engine_map="",
+		 segid_system_map="",
                  verbose=0,
 		 timeout=-1):
         self.filter = Filter(remove_newlines=True, collapse_spaces=True)
@@ -207,8 +207,11 @@ class Root(object):
         self.verbose = verbose
 
         self.segid_engine_map = None
-        if segid_engine_map != "":
-            self.log("Reading map from segment IDs to engine names")
+        if segid_system_map != "":
+            self.log("Reading map from segment IDs to engine names: |%s|" % segid_system_map)
+            self._set_segment2system_map(segid_system_map)
+        else:
+            self.log("No map from segment IDs to engine names is available")
 
         self.log("Initialization query")
         i = 0
@@ -222,6 +225,19 @@ class Root(object):
             i = i+1
         self.log("Initialization query completed")
 
+    def _set_segment2system_map(self, file):
+
+        map = open(file, 'r')
+#format of each line
+#segment_id engine_name 
+
+	self.segid_engine_map = {}
+        line = map.readline().strip()	
+        while line:
+	    entries = line.split()
+	    self.segid_engine_map[str(int(entries[0]))] = entries[1]
+            line = map.readline().strip()	
+
     def _get_engine_key(self, segid):
         if self.segid_engine_map != None:
 	    if not segid in self.segid_engine_map:
@@ -231,7 +247,7 @@ class Root(object):
 	         name = self.segid_engine_map[segid]
 	else:
 	    idx = int(segid) % self.engines_N
-	    name = self.engine_name[str(idx)]
+	    name = self.engine_name[idx]
 	self.log("Engine name for segid %s is %s" % (str(segid), name ))
 	
 	return name
@@ -323,7 +339,7 @@ class Root(object):
         
         return value
 
-    def _cleanMosesPhraseAlignemnt(self, query):
+    def _cleanMosesPhraseAlignment(self, query):
         pattern = " *\|\d+\-\d+\|"
         re_passthrough = re.compile(pattern)
         query = re_passthrough.sub('',query)
@@ -379,6 +395,8 @@ class Root(object):
                 segid = "0000"
 
 	self.log("The server is working on segid: %s" %repr(segid))
+	key = self._get_engine_key(segid)
+	self.log("The server is working on system key: %s" %repr(key))
 
 
 	if self.verbose > 0:
@@ -391,6 +409,7 @@ class Root(object):
             result_queue = Queue.Queue()
 
 	    key = self._get_engine_key(segid)
+	    self.log("The server is working on system key: %s" %repr(key))
             self.queue_translate[key].put((result_queue, segid, q))
 
             try:
@@ -409,7 +428,7 @@ class Root(object):
                self.log("Source before sentence-level confidence estimation: %s" %q)
             source = self._getOnlyTranslation(q)
             target = self._getOnlyTranslation(translation)
-	    target = self._cleanMosesPhraseAlignemnt(target)
+	    target = self._cleanMosesPhraseAlignment(target)
             sentenceConfidence = self._get_sentence_confidence("ID", source, target)
             self.log("Sentence Confidence: %s" %sentenceConfidence)
             if self.verbose > 0:
@@ -472,6 +491,15 @@ class Root(object):
         self.log("The server is working on update, segment: %s" %repr(source))
         self.log("The server is working on update, translation: %s" %repr(target))
 
+        if "segid" in kwargs :
+                segid = kwargs["segid"]
+        else:
+                segid = "0000"
+	self.log("The server is working on segid: %s" %repr(segid))
+
+	key = self._get_engine_key(segid)
+	self.log("The server is working on system key: %s" %repr(key))
+
         if "extra" in kwargs :
                 extra = kwargs["extra"]
                 self.log("The server is working on update, extra: %s" %repr(extra))
@@ -479,6 +507,8 @@ class Root(object):
         answerDict = {}
         answerDict["code"] = "0"
         answerDict["string"] = "OK, but this server does not manage user feedback"
+        answerDict["engineName"] = key
+        answerDict["segmentID"] = segid
 
         data = {"data" : answerDict}
         self.log("The server is returning: %s" %self._dump_json(data))
@@ -494,9 +524,18 @@ class Root(object):
             cherrypy.response.status = 400
             return self._dump_json(errors)
 
+        if "segid" in kwargs :
+                segid = kwargs["segid"]
+        else:
+                segid = "0000"
+
+        key = self._get_engine_key(segid)
+
         answerDict = {}
         answerDict["code"] = "0"
         answerDict["string"] = "OK, but this server does not manage user feedback"
+        answerDict["engineName"] = key
+        answerDict["segmentID"] = segid
 
         data = {"data" : answerDict}
         self.log("The server is returning: %s" %self._dump_json(data))
@@ -538,6 +577,9 @@ if __name__ == "__main__":
 
     #configuration file for the updater
     parser.add_argument('-updater', dest="updater_config", action='store', help='path to the configuration file of the updater', default="XXXXXXXXX")
+    
+    #file for mapping serfver ID to specific engine
+    parser.add_argument('-segment2system', dest="segment2system", action='store', help='path to the file containing the map from segment IDs to engine names', default="")
 
     # persistent threads
     thread_options = parser.add_mutually_exclusive_group()
@@ -591,6 +633,7 @@ if __name__ == "__main__":
                              prepro_cmd = args.prepro, postpro_cmd = args.postpro,
                              sentence_confidence_cmd = args.sentence_confidence,
                              slang = args.slang, tlang = args.tlang,
+			     segid_system_map = args.segment2system,
                              pretty = args.pretty,
                              verbose = args.verbose,
                              persistent_processes = persistent_processes))

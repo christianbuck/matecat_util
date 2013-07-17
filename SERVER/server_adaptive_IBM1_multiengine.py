@@ -11,7 +11,7 @@ import re
 from itertools import izip
 from threading import Timer
 
-from aligner import Aligner_IBM1, Aligner_Dummy
+from aligner import Aligner_onlineGIZA, Aligner_GIZA, Aligner_IBM1, Aligner_Dummy
 from phrase_extractor import Extractor_Moses, Extractor_Dummy
 from annotate import Annotator_onlinecache
 
@@ -206,6 +206,7 @@ class Root(object):
 		 sentence_confidence_cmd=None,
 		 updater_source_prepro_cmd=None, updater_target_prepro_cmd=None,
 		 slang=None, tlang=None, pretty=False, persistent_processes=False,
+                 segid_system_map="",
                  verbose=0,
 		 timeout=-1):
         self.filter = Filter(remove_newlines=True, collapse_spaces=True)
@@ -220,7 +221,7 @@ class Root(object):
         self.updater = {}
         for k in updater_config.keys():
             self.updater[k] = None
-            if updater_config[k] != None:
+            if updater_config[k] != None and updater_config[k] != "_NOUPDATE_":
             	self.updater[k] = UpdaterProc(updater_config[k])
 
         self.prepro_cmd = []
@@ -264,19 +265,56 @@ class Root(object):
         self.timeout = timeout
         self.verbose = verbose
 
-    def _get_engine_key(self, segid):
-        idx = int(segid) % self.engines_N
-        key = 'Engine_'+str(idx)
-        self.log("Engine name for segid %s is %s" % (str(segid), key ))
+        self.segid_engine_map = None
+        self.segid_updater_map = None
+        if segid_system_map != "":
+            self.log("Reading map from segment IDs to engine and updater names: |%s|" % segid_system_map)
+            self._set_segment2systems_map(segid_system_map)
+        else:
+            self.log("No map from segment IDs to engine and updater names is available")
 
-        return key
+    def _set_segment2system_map(self, file):
+
+        map = open(file, 'r')
+#format of each line
+#segment_id engine_name updater_name
+
+        self.segid_engine_map = {}
+        self.segid_updater_map = {}
+        line = map.readline().strip()   
+        while line:
+            entries = line.split()
+            self.segid_engine_map[str(int(entries[0]))] = entries[1]
+            self.segid_updater_map[str(int(entries[0]))] = entries[2]
+            line = map.readline().strip()       
+
+    def _get_engine_key(self, segid):
+        if self.segid_engine_map != None:
+            if not segid in self.segid_engine_map:
+                 self.log("Segment id is not present in the map. Use the first available engine")
+                 name = self.engine_name[0]
+            else:
+                 name = self.segid_engine_map[segid]
+        else:
+            idx = int(segid) % self.engines_N
+            name = self.engine_name[idx]
+        self.log("Engine name for segid %s is %s" % (str(segid), name ))
+
+        return name
 
     def _get_updater_key(self, segid):
-        idx = int(segid) % self.updater_N
-        key = 'Updater_'+str(idx)
-        self.log("Updater name for segid %s is %s" % (str(segid), key ))
+        if self.segid_updater_map != None:
+            if not segid in self.segid_updater_map:
+                 self.log("Segment id is not present in the map. Use the first available updater")
+                 name = self.updater_name[0]
+            else:
+                 name = self.segid_updater_map[segid]
+        else:
+            idx = int(segid) % self.updater_N
+            name = self.updater_name[idx]
+        self.log("Updater name for segid %s is %s" % (str(segid), name ))
 
-        return key
+        return name
 
     def _check_params_translate(self, params):
         return self._check_params(params, self.required_params_translate, self.expected_params_translate)
@@ -454,15 +492,9 @@ class Root(object):
 
             try:
                 if self.timeout and self.timeout > 0:
-                    XXX = result_queue.get(timeout=self.timeout)
-                    self.log("XXX: %s" %repr(XXX))
-                    name, translation = XXX
-#                    name, translation = result_queue.get(timeout=self.timeout)
+                    name, translation = result_queue.get(timeout=self.timeout)
                 else:
-                    XXX = result_queue.get()
-                    self.log("XXX: %s" %repr(XXX))
-                    name, translation = XXX
-#                    name, translation = result_queue.get()
+                    name, translation = result_queue.get()
                 self.log("Engine name: %s" %name)
             except Queue.Empty:
                 return self._timeout_error(q, 'translation')
@@ -544,6 +576,19 @@ class Root(object):
                 segid = "0000"
         self.log("The server is working on segid: %s" %repr(segid))
 
+	key = self._get_updater_key(segid)
+        if updater_config[key] == None:
+	        answerDict = {}
+        	answerDict["code"] = "0"
+       		answerDict["string"] = "OK, but this engine/updater combination does not manage user feedback"
+                answerDict["engineName"] = key
+                answerDict["segmentID"] = segid
+
+        	data = {"data" : answerDict}
+        	self.log("The server is returning: %s" %self._dump_json(data))
+        	return self._dump_json(data)
+
+
         source = self._updater_source_prepro(self.filter.filter(source))
  	source=self._removeXMLTags(source)
  	source=source.encode("utf-8")
@@ -558,7 +603,6 @@ class Root(object):
                 extra = kwargs["extra"]
                 self.log("The server is working on update, extra: %s" %repr(extra))
 
-	key = self._get_updater_key(segid)
         annotation = self.updater[key].update(source=source, target=target)
         self.log("The server created this annotation: %s from the current segment and translation" % annotation)
 
@@ -606,7 +650,24 @@ class Root(object):
 
 #We assume that the string for resetting is the same for all MT engines, and it is created by any updater
 
+        if "segid" in kwargs :
+                segid = kwargs["segid"]
+        else:
+                segid = "0000"
+        self.log("The server is working on segid: %s" %repr(segid))
+
         k = self._get_updater_key(segid)
+        if updater_config[k] == None:
+                answerDict = {}
+                answerDict["code"] = "0"
+                answerDict["string"] = "OK, but this engine/updater combination does not manage this request"
+                answerDict["engineName"] = k
+                answerDict["segmentID"] = segid
+
+                data = {"data" : answerDict}
+                self.log("The server is returning: %s" %self._dump_json(data))
+                return self._dump_json(data)
+
 	annotation = self.updater[k].reset()
         if self.verbose > 0:
             self.log("The server created this annotation: %s" % annotation)
@@ -677,6 +738,13 @@ if __name__ == "__main__":
     parser.add_argument('-updater1', dest="updater1_config", action='store', help='path to the configuration file of the additional updater', default="")
     parser.add_argument('-updater2', dest="updater2_config", action='store', help='path to the configuration file of the additional updater', default="")
     parser.add_argument('-updater3', dest="updater3_config", action='store', help='path to the configuration file of the additional updater', default="")
+    parser.add_argument('-updater-name', dest="moses_name", action='store', help='name of the updater', default="")
+    parser.add_argument('-updater1-name', dest="updater1_name", action='store', help='name of the additional updater', default="")
+    parser.add_argument('-updater2-name', dest="updater2_name", action='store', help='name of the additional updater', default="")
+    parser.add_argument('-updater3-name', dest="updater3_name", action='store', help='name of the additional updater', default="")
+
+    #file for mapping serfver ID to specific engine and updater
+    parser.add_argument('-segment2system', dest="segment2system", action='store', help='path to the file containing the map from segment IDs to engine and updater names', default="")
 
     # persistent threads
     thread_options = parser.add_mutually_exclusive_group()
@@ -690,33 +758,91 @@ if __name__ == "__main__":
         init_log("%s.trans.log" %args.logprefix)
 
     moses = {}
-    moses['Engine_0'] = MosesProc(" ".join((args.moses_path, args.moses_options)),"Engine_0")
+    if args.moses_name:
+        name = args.moses_name
+    else:
+        name = "Engine_0"
+    moses[name] = MosesProc(" ".join((args.moses_path, args.moses_options)),name)
     if args.moses1_path != "":
-        moses['Engine_1'] = MosesProc(" ".join((args.moses1_path, args.moses1_options)),"Engine_1")
+        if args.moses1_name:
+            name = args.moses1_name
+        else:
+            name = "Engine_1"
+        moses[name] = MosesProc(" ".join((args.moses1_path, args.moses1_options)),name)
     if args.moses2_path != "":
-        moses['Engine_2'] = MosesProc(" ".join((args.moses2_path, args.moses2_options)),"Engine_2")
+        if args.moses2_name:
+            name = args.moses2_name
+        else:
+            name = "Engine_2"
+        moses[name] = MosesProc(" ".join((args.moses2_path, args.moses2_options)),name)
     if args.moses3_path != "":
-        moses['Engine_3'] = MosesProc(" ".join((args.moses3_path, args.moses3_options)),"Engine_3")
-    sys.stderr.write("There are %s active engines\n" %repr(len(moses)))
+        if args.moses3_name:
+            name = args.moses3_name
+        else:
+            name = "Engine_3"
+        moses[name] = MosesProc(" ".join((args.moses3_path, args.moses3_options)),name)
 
     for k in moses.keys():
         sys.stderr.write("k:|%s|\n" %repr(k))
 
 
+
+   updater_config = {}
+    if args.moses_name:
+        name = args.moses_name
+    else:
+        name = "Engine_0"
+    moses[name] = MosesProc(" ".join((args.moses_path, args.moses_options)),name)
+    if args.moses1_path != "":
+        if args.moses1_name:
+            name = args.moses1_name
+        else:
+            name = "Engine_1"
+        moses[name] = MosesProc(" ".join((args.moses1_path, args.moses1_options)),name)
+    if args.moses2_path != "":
+        if args.moses2_name:
+            name = args.moses2_name
+        else:
+            name = "Engine_2"
+        moses[name] = MosesProc(" ".join((args.moses2_path, args.moses2_options)),name)
+    if args.moses3_path != "":
+        if args.moses3_name:
+            name = args.moses3_name
+        else:
+            name = "Engine_3"
+        moses[name] = MosesProc(" ".join((args.moses3_path, args.moses3_options)),name)
+
+
     updater_config = {}
-    updater_config['Updater_0'] = args.updater_config 
+    if args.updater_name:
+        name = args.updater_name 
+    else:
+        name = "Updater_0"
+    updater_config[name] = args.updater_config 
     if args.updater1_config != "":
-        updater_config['Updater_1'] = args.updater1_config 
+        if args.updater1_name:
+            name = args.updater1_name
+        else:
+            name = "Updater_1"
+        updater_config[name] = args.updater1_config 
     if args.updater2_config != "":
-        updater_config['Updater_2'] = args.updater2_config 
+        if args.updater2_name:
+            name = args.updater2_name
+        else:
+            name = "Updater_2"
+        updater_config[name] = args.updater2_config           
+
     if args.updater3_config != "":
-        updater_config['Updater_3'] = args.updater3_config 
-    sys.stderr.write("There are %s active updater\n" %repr(len(updater_config)))
+        if args.updater3_name:
+            name = args.updater3_name
+        else:
+            name = "Updater_3"
+        updater_config[name] = args.updater3_config           
 
     for k in updater_config.keys():
         sys.stderr.write("k:|%s|\n" %repr(k))
 
-    assert (len(moses) == len(updater_config)), "number of engines and updater do not match"
+    assert (len(moses) == len(updater_config)), "number of engines and updaters does not match"
 
     cherrypy.config.update({'server.request_queue_size' : 1000,
                             'server.socket_port': args.port,
@@ -733,6 +859,7 @@ if __name__ == "__main__":
                              updater_source_prepro_cmd = args.updater_source_prepro,
 			     updater_target_prepro_cmd = args.updater_target_prepro,
                              slang = args.slang, tlang = args.tlang,
+                             segid_system_map = args.segment2system,
                              pretty = args.pretty,
                              verbose = args.verbose,
                              persistent_processes = persistent_processes))
