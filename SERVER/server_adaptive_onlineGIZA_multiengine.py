@@ -11,7 +11,7 @@ import re
 from itertools import izip
 from threading import Timer
 
-from aligner import Aligner_IBM1, Aligner_Dummy
+from aligner import Aligner_onlineGIZA, Aligner_Dummy
 from phrase_extractor import Extractor_Moses, Extractor_Dummy
 from annotate import Annotator_onlinecache
 
@@ -131,7 +131,7 @@ class UpdaterProc(object):
         parser = SafeConfigParser()
         parser.read(config)
 
-	self.Aligner_object = Aligner_IBM1(parser)
+	self.Aligner_object = Aligner_onlineGIZA(parser)
 	self.Extractor_object = Extractor_Moses(parser)
 	self.Annotator_object = Annotator_onlinecache(parser)
         self.logger = logging.getLogger('translation_log.updater')
@@ -677,6 +677,10 @@ if __name__ == "__main__":
     parser.add_argument('-updater1', dest="updater1_config", action='store', help='path to the configuration file of the additional updater', default="")
     parser.add_argument('-updater2', dest="updater2_config", action='store', help='path to the configuration file of the additional updater', default="")
     parser.add_argument('-updater3', dest="updater3_config", action='store', help='path to the configuration file of the additional updater', default="")
+    parser.add_argument('-updater-name', dest="moses_name", action='store', help='name of the updater', default="")
+    parser.add_argument('-updater1-name', dest="updater1_name", action='store', help='name of the additional updater', default="")
+    parser.add_argument('-updater2-name', dest="updater2_name", action='store', help='name of the additional updater', default="")
+    parser.add_argument('-updater3-name', dest="updater3_name", action='store', help='name of the additional updater', default="")
 
     # persistent threads
     thread_options = parser.add_mutually_exclusive_group()
@@ -690,33 +694,91 @@ if __name__ == "__main__":
         init_log("%s.trans.log" %args.logprefix)
 
     moses = {}
-    moses['Engine_0'] = MosesProc(" ".join((args.moses_path, args.moses_options)),"Engine_0")
+    if args.moses_name:
+        name = args.moses_name
+    else:
+        name = "Engine_0"
+    moses[name] = MosesProc(" ".join((args.moses_path, args.moses_options)),name)
     if args.moses1_path != "":
-        moses['Engine_1'] = MosesProc(" ".join((args.moses1_path, args.moses1_options)),"Engine_1")
+        if args.moses1_name:
+            name = args.moses1_name
+        else:
+            name = "Engine_1"
+        moses[name] = MosesProc(" ".join((args.moses1_path, args.moses1_options)),name)
     if args.moses2_path != "":
-        moses['Engine_2'] = MosesProc(" ".join((args.moses2_path, args.moses2_options)),"Engine_2")
+        if args.moses2_name:
+            name = args.moses2_name
+        else:
+            name = "Engine_2"
+        moses[name] = MosesProc(" ".join((args.moses2_path, args.moses2_options)),name)
     if args.moses3_path != "":
-        moses['Engine_3'] = MosesProc(" ".join((args.moses3_path, args.moses3_options)),"Engine_3")
-    sys.stderr.write("There are %s active engines\n" %repr(len(moses)))
+        if args.moses3_name:
+            name = args.moses3_name
+        else:
+            name = "Engine_3"
+        moses[name] = MosesProc(" ".join((args.moses3_path, args.moses3_options)),name)
 
     for k in moses.keys():
         sys.stderr.write("k:|%s|\n" %repr(k))
 
 
+
+   updater_config = {}
+    if args.moses_name:
+        name = args.moses_name
+    else:
+        name = "Engine_0"
+    moses[name] = MosesProc(" ".join((args.moses_path, args.moses_options)),name)
+    if args.moses1_path != "":
+        if args.moses1_name:
+            name = args.moses1_name
+        else:
+            name = "Engine_1"
+        moses[name] = MosesProc(" ".join((args.moses1_path, args.moses1_options)),name)
+    if args.moses2_path != "":
+        if args.moses2_name:
+            name = args.moses2_name
+        else:
+            name = "Engine_2"
+        moses[name] = MosesProc(" ".join((args.moses2_path, args.moses2_options)),name)
+    if args.moses3_path != "":
+        if args.moses3_name:
+            name = args.moses3_name
+        else:
+            name = "Engine_3"
+        moses[name] = MosesProc(" ".join((args.moses3_path, args.moses3_options)),name)
+
+
     updater_config = {}
-    updater_config['Updater_0'] = args.updater_config 
+    if args.updater_name:
+        name = args.updater_name 
+    else:
+        name = "Updater_0"
+    updater_config[name] = args.updater_config 
     if args.updater1_config != "":
-        updater_config['Updater_1'] = args.updater1_config 
+        if args.updater1_name:
+            name = args.updater1_name
+        else:
+            name = "Updater_1"
+        updater_config[name] = args.updater1_config 
     if args.updater2_config != "":
-        updater_config['Updater_2'] = args.updater2_config 
+        if args.updater2_name:
+            name = args.updater2_name
+        else:
+            name = "Updater_2"
+        updater_config[name] = args.updater2_config           
+
     if args.updater3_config != "":
-        updater_config['Updater_3'] = args.updater3_config 
-    sys.stderr.write("There are %s active updater\n" %repr(len(updater_config)))
+        if args.updater3_name:
+            name = args.updater3_name
+        else:
+            name = "Updater_3"
+        updater_config[name] = args.updater3_config           
 
     for k in updater_config.keys():
         sys.stderr.write("k:|%s|\n" %repr(k))
 
-    assert (len(moses) == len(updater_config)), "number of engines and updater do not match"
+    assert (len(moses) == len(updater_config)), "number of engines and updaters does not match"
 
     cherrypy.config.update({'server.request_queue_size' : 1000,
                             'server.socket_port': args.port,
