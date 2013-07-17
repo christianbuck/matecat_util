@@ -11,7 +11,7 @@ import re
 from itertools import izip
 from threading import Timer
 
-from aligner import Aligner_IBM1, Aligner_Dummy
+from aligner import Aligner_onlineGIZA, Aligner_GIZA, Aligner_IBM1, Aligner_Dummy
 from phrase_extractor import Extractor_Moses, Extractor_Dummy
 from annotate import Annotator_onlinecache
 
