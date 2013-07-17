@@ -110,7 +110,6 @@ class ReadThread(threading.Thread):
 
             found = False
             self.log("looking for id %s in %s result queues" %(line[0], len(result_queues)))
-            self.log("the rest of the line is :|%s|" %(line[1]))
             for idx, (i, name, q) in enumerate(result_queues):
                 if i == int(line[0]):
                     if len(line) > 1:
