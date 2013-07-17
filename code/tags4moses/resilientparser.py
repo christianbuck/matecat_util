@@ -58,6 +58,7 @@ class ResilientParser(HTMLParser):
 	re_value = re.compile('(notranslate)')
         for idx, token in enumerate(self.tokens):
 	    ann_data = self.annotated_data[idx+1]
+
 	    new_ann_data = []
             for tag in ann_data:
 		name = tag[0]
@@ -74,13 +75,12 @@ class ResilientParser(HTMLParser):
             self.annotated_data[idx+1] = new_ann_data	
 
     def fix_annotation_spaces(self):
-
         line = self.line
 	ann_data = self.annotated_data[0]
         new_ann_data = []
 
         for idx, token in enumerate(self.tokens):
-            ann_data = self.annotated_data[idx]
+            ann_data = self.annotated_data[idx+1]
             new_ann_data = []
             for tag in ann_data:
                 tag_idx = tag[2]
@@ -151,7 +151,7 @@ class ResilientParser(HTMLParser):
 			    spacetype = prev_spacetype
 	
                 new_ann_data.append( (tag[0], tag[1], tag[2], tag[3], spacetype) ) 
-            self.annotated_data[idx] = new_ann_data
+            self.annotated_data[idx+1] = new_ann_data
 
 
     def process(self, line):
