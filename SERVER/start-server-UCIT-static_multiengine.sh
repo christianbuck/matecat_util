@@ -12,7 +12,7 @@ matecatdir=/path/to/main/MATECAT/dir
 softwaredir=$matecatdir/code/software
 python=/path/to/python-2.7.2
 
-server=$softwaredir/SERVER/server_static.py
+server=$softwaredir/SERVER/server_static_multiengine.py
 
 mosesdir=/path/to/moses/dir
 # ex:
