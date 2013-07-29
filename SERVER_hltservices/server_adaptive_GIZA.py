@@ -127,7 +127,7 @@ class UpdaterProc(object):
         parser = SafeConfigParser()
         parser.read(config)
 
-	self.Aligner_object = Aligner_onlineGIZA(parser)
+	self.Aligner_object = Aligner_GIZA(parser)
 	self.Extractor_object = Extractor_Moses(parser)
 	self.Annotator_object = Annotator_onlinecache(parser)
         self.logger = logging.getLogger('translation_log.updater')

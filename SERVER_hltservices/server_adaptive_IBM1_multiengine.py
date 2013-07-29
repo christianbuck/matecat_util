@@ -63,20 +63,23 @@ class Filter(object):
         return re.sub('\s\s+', ' ', s)
 
 class WriteThread(threading.Thread):
-    def __init__(self, p_in, source_queue, web_queue):
+    def __init__(self, p_in, source_queue, web_queue, name):
         threading.Thread.__init__(self)
         self.pipe = p_in
         self.source_queue = source_queue
         self.web_queue = web_queue
         self.logger = logging.getLogger('translation_log.writer')
+        self.name = name
 
     def run(self):
         i = 0
         while True:
-            result_queue, source = self.source_queue.get()
-            self.web_queue.put( (i, result_queue) )
+            result_queue, segid, source = self.source_queue.get()
+            self.web_queue.put( (i, self.name, result_queue) )
             wrapped_src = u"<seg id=%s>%s</seg>\n" %(i, source)
+            self.log("NAME: |%s|" %repr(self.name))
             self.log("writing to process: %s" %repr(wrapped_src))
+            self.log("writing to process: segid:%s" %repr(segid))
             self.pipe.write(wrapped_src.encode("utf-8"))
             self.pipe.flush()
             i += 1
@@ -107,12 +110,13 @@ class ReadThread(threading.Thread):
 
             found = False
             self.log("looking for id %s in %s result queues" %(line[0], len(result_queues)))
-            for idx, (i, q) in enumerate(result_queues):
+            self.log("the rest of the line is :|%s|" %(line[1]))
+            for idx, (i, name, q) in enumerate(result_queues):
                 if i == int(line[0]):
                     if len(line) > 1:
-                        q.put(line[1])
+                        q.put(name, line[1])
                     else:
-                        q.put("")
+                        q.put(name, "")
                     result_queues.pop(idx)
                     found = True
                     break
@@ -127,7 +131,7 @@ class UpdaterProc(object):
         parser = SafeConfigParser()
         parser.read(config)
 
-	self.Aligner_object = Aligner_onlineGIZA(parser)
+	self.Aligner_object = Aligner_IBM1(parser)
 	self.Extractor_object = Extractor_Moses(parser)
 	self.Annotator_object = Annotator_onlinecache(parser)
         self.logger = logging.getLogger('translation_log.updater')
@@ -164,14 +168,15 @@ class UpdaterProc(object):
         self.logger.info(message)
 
 class MosesProc(object):
-    def __init__(self, cmd):
+    def __init__(self, cmd, name):
         self.proc = popen(cmd)
         self.logger = logging.getLogger('translation_log.moses')
+        self.name = name
 
         self.source_queue = Queue.Queue()
         self.web_queue = Queue.Queue()
 
-        self.writer = WriteThread(self.proc.stdin, self.source_queue, self.web_queue)
+        self.writer = WriteThread(self.proc.stdin, self.source_queue, self.web_queue, self.name)
         self.writer.setDaemon(True)
         self.writer.start()
 
@@ -197,18 +202,27 @@ class Root(object):
     required_params_update = ["key", "segment", "translation", "target", "source"]
     required_params_reset = ["key"]
 
-    def __init__(self, queue_moses, updater_config=None, prepro_cmd=None, postpro_cmd=None,
+    def __init__(self, moses, updater_config, prepro_cmd=None, postpro_cmd=None,
 		 sentence_confidence_cmd=None,
 		 updater_source_prepro_cmd=None, updater_target_prepro_cmd=None,
 		 slang=None, tlang=None, pretty=False, persistent_processes=False,
+                 segid_system_map="",
                  verbose=0,
 		 timeout=-1):
         self.filter = Filter(remove_newlines=True, collapse_spaces=True)
-        self.queue_translate = queue_moses
-        self.updater = None
 
-        if updater_config != None:
-	    self.updater = UpdaterProc(updater_config)
+        self.engines_N = len(moses.keys())
+        self.log("_get_engine_key self.engines_N:|%d|" % self.engines_N)
+
+        self.queue_translate = {}
+        for k in moses.keys():
+            self.queue_translate[k] = moses[k].source_queue
+
+        self.updater = {}
+        for k in updater_config.keys():
+            self.updater[k] = None
+            if updater_config[k] != None and updater_config[k] != "_NOUPDATE_":
+            	self.updater[k] = UpdaterProc(updater_config[k])
 
         self.prepro_cmd = []
         if prepro_cmd != None:
@@ -251,65 +265,69 @@ class Root(object):
         self.timeout = timeout
         self.verbose = verbose
 
-    def _check_params_translate(self, params):
-        errors = []
-        missing = [p for p in self.required_params_translate if not p in params]
-        if missing:
-            for p in missing:
-                errors.append({"domain":"global",
-                               "reason":"required",
-                               "message":"Required parameter: %s" %p,
-                               "locationType": "parameter",
-                               "location": "%s" %p})
-            return {"error": {"errors":errors,
-                              "code":400,
-                              "message":"Required parameter: %s" %missing[0]}}
+        self.segid_engine_map = None
+        self.segid_updater_map = None
+        if segid_system_map != "":
+            self.log("Reading map from segment IDs to engine and updater names: |%s|" % segid_system_map)
+            self._set_segment2systems_map(segid_system_map)
+        else:
+            self.log("No map from segment IDs to engine and updater names is available")
 
-        for key, val in self.expected_params_translate.iteritems():
-            assert key in params, "expected param %s" %key
-            if params[key].lower() != val:
-                message = "expetect value for parameter %s:'%s'" %(key,val)
-                errors.append({"domain":"global",
-                               "reason":"invalid value: '%s'" %params[key],
-                               "message":message,
-                               "locationType": "parameter",
-                               "location": "%s" %p})
-                return {"error": {"errors":errors,
-                                  "code":400,
-                                  "message":message}}
-        return None
+    def _set_segment2system_map(self, file):
+
+        map = open(file, 'r')
+#format of each line
+#segment_id engine_name updater_name
+
+        self.segid_engine_map = {}
+        self.segid_updater_map = {}
+        line = map.readline().strip()   
+        while line:
+            entries = line.split()
+            self.segid_engine_map[str(int(entries[0]))] = entries[1]
+            self.segid_updater_map[str(int(entries[0]))] = entries[2]
+            line = map.readline().strip()       
+
+    def _get_engine_key(self, segid):
+        if self.segid_engine_map != None:
+            if not segid in self.segid_engine_map:
+                 self.log("Segment id is not present in the map. Use the first available engine")
+                 name = self.engine_name[0]
+            else:
+                 name = self.segid_engine_map[segid]
+        else:
+            idx = int(segid) % self.engines_N
+            name = self.engine_name[idx]
+        self.log("Engine name for segid %s is %s" % (str(segid), name ))
+
+        return name
+
+    def _get_updater_key(self, segid):
+        if self.segid_updater_map != None:
+            if not segid in self.segid_updater_map:
+                 self.log("Segment id is not present in the map. Use the first available updater")
+                 name = self.updater_name[0]
+            else:
+                 name = self.segid_updater_map[segid]
+        else:
+            idx = int(segid) % self.updater_N
+            name = self.updater_name[idx]
+        self.log("Updater name for segid %s is %s" % (str(segid), name ))
+
+        return name
+
+    def _check_params_translate(self, params):
+        return self._check_params(params, self.required_params_translate, self.expected_params_translate)
 
     def _check_params_update(self, params):
-        errors = []
-        missing = [p for p in self.required_params_update if not p in params]
-        if missing:
-            for p in missing:
-                errors.append({"domain":"global",
-                               "reason":"required",
-                               "message":"Required parameter: %s" %p,
-                               "locationType": "parameter",
-                               "location": "%s" %p})
-            return {"error": {"errors":errors,
-                              "code":400,
-                              "message":"Required parameter: %s" %missing[0]}}
-
-        for key, val in self.expected_params_update.iteritems():
-            assert key in params, "expected param %s" %key
-            if params[key].lower() != val:
-                message = "expected value for parameter %s:'%s'" %(key,val)
-                errors.append({"domain":"global",
-                               "reason":"invalid value: '%s'" %params[key],
-                               "message":message,
-                               "locationType": "parameter",
-                               "location": "%s" %p})
-                return {"error": {"errors":errors,
-                                  "code":400,
-                                  "message":message}}
-        return None
+        return self._check_params(params, self.required_params_update, self.expected_params_update)
 
     def _check_params_reset(self, params):
+        return self._check_params(params, self.required_params_reset, self.expected_params_reset)
+   
+    def _check_params(self, params, required_params, expected_params):
         errors = []
-        missing = [p for p in self.required_params_reset if not p in params]
+        missing = [p for p in required_params if not p in params]
         if missing:
             for p in missing:
                 errors.append({"domain":"global",
@@ -321,7 +339,7 @@ class Root(object):
                               "code":400,
                               "message":"Required parameter: %s" %missing[0]}}
 
-        for key, val in self.expected_params_update.iteritems():
+        for key, val in expected_params.iteritems():
             assert key in params, "expected param %s" %key
             if params[key].lower() != val:
                 message = "expected value for parameter %s:'%s'" %(key,val)
@@ -452,6 +470,13 @@ class Root(object):
             cherrypy.response.status = 400
             return self._dump_json(errors)
         self.log("The server is working on: %s" %repr(kwargs["q"]))
+
+        if "segid" in kwargs :
+                segid = kwargs["segid"]
+        else:
+                segid = "0000"
+        self.log("The server is working on segid: %s" %repr(segid))
+
 	if self.verbose > 0:
             self.log("Request before preprocessing: %s" %repr(kwargs["q"]))
         q = self._prepro(self.filter.filter(kwargs["q"]))
@@ -460,12 +485,17 @@ class Root(object):
         translation = ""
         if q.strip():
             result_queue = Queue.Queue()
-            self.queue_translate.put((result_queue, q))
+
+            key = self._get_engine_key(segid)
+            self.log("KEY: %s" %repr(key))
+            self.queue_translate[key].put((result_queue, segid, q))
+
             try:
                 if self.timeout and self.timeout > 0:
-                    translation = result_queue.get(timeout=self.timeout)
+                    name, translation = result_queue.get(timeout=self.timeout)
                 else:
-                    translation = result_queue.get()
+                    name, translation = result_queue.get()
+                self.log("Engine name: %s" %name)
             except Queue.Empty:
                 return self._timeout_error(q, 'translation')
 
@@ -514,8 +544,14 @@ class Root(object):
                 self.log("sentence_confidence_enabled: passed")
                 if sentenceConfidence:
                         translationDict["sentence_confidence"] = sentenceConfidence
+        translationDict["engineName"] = name
+        translationDict["segmentID"] = segid
 
-        data = {"data" : {"translations" : [translationDict]}}
+        answerDict = {}
+        answerDict["translations"] = [translationDict]
+
+        data = {"data" : answerDict}
+#        data = {"data" : {"translations" : [translationDict]}}
         self.log("The server is returning: %s" %self._dump_json(data))
         return self._dump_json(data)
 
@@ -534,8 +570,32 @@ class Root(object):
         self.log("The server is updating, segment: %s" %repr(source))
         self.log("The server is updating, translation: %s" %repr(target))
 
+        if "segid" in kwargs :
+                segid = kwargs["segid"]
+        else:
+                segid = "0000"
+        self.log("The server is working on segid: %s" %repr(segid))
+
+	key = self._get_updater_key(segid)
+        if updater_config[key] == None:
+	        answerDict = {}
+        	answerDict["code"] = "0"
+       		answerDict["string"] = "OK, but this engine/updater combination does not manage user feedback"
+                answerDict["engineName"] = key
+                answerDict["segmentID"] = segid
+
+        	data = {"data" : answerDict}
+        	self.log("The server is returning: %s" %self._dump_json(data))
+        	return self._dump_json(data)
+
+
         source = self._updater_source_prepro(self.filter.filter(source))
+ 	source=self._removeXMLTags(source)
+ 	source=source.encode("utf-8")
         target = self._updater_target_prepro(self.filter.filter(target))
+ 	target=self._removeXMLTags(target)
+ 	target=target.encode("utf-8")
+
         self.log("The server is updating, after preprocessing segment: %s" %repr(source))
         self.log("The server is updating, after preprocessing translation: %s" %repr(target))
 
@@ -543,12 +603,7 @@ class Root(object):
                 extra = kwargs["extra"]
                 self.log("The server is working on update, extra: %s" %repr(extra))
 
- 	source=self._removeXMLTags(source)
- 	source=source.encode("utf-8")
- 	target=self._removeXMLTags(target)
- 	target=target.encode("utf-8")
-
-        annotation = self.updater.update(source=source, target=target)
+        annotation = self.updater[key].update(source=source, target=target)
         self.log("The server created this annotation: %s from the current segment and translation" % annotation)
 
         annotation=annotation.decode("utf-8")
@@ -558,23 +613,30 @@ class Root(object):
             self.log("Request Dummy_Input: %s" %repr(q))
         translation = ""
         result_queue = Queue.Queue()
-        self.queue_translate.put((result_queue, q))
+
+        key = self._get_engine_key(segid)
+        self.queue_translate[key].put((result_queue, segid, q))
+
         try:
 	    if self.timeout and self.timeout > 0:
-               translation = result_queue.get(timeout=self.timeout)
+               name, translation = result_queue.get(timeout=self.timeout)
             else:
-               translation = result_queue.get()
+               name, translation = result_queue.get()
         except Queue.Empty:
             return self._timeout_error(q, 'dummy_translation')
         if self.verbose > 0:
             self.log("Request after translation of Dummy_Input (NOT USED): %s" %repr(translation))
 
-	code = "0"
-	string = "OK"
+        answerDict = {}
+        answerDict["code"] = "0"
+        answerDict["string"] = "OK"
+        answerDict["engineName"] = name
+        answerDict["segmentID"] = segid
 
-        data = {"data" : {"code": code,  "string": string}}
+        data = {"data" : answerDict}
         self.log("The server is returning: %s" %self._dump_json(data))
         return self._dump_json(data)
+
 
     @cherrypy.expose
     def reset(self, **kwargs):
@@ -586,29 +648,52 @@ class Root(object):
             cherrypy.response.status = 400
             return self._dump_json(errors)
 
-        annotation = self.updater.reset()
-        self.log("The server created this annotation: %s" % annotation)
+#We assume that the string for resetting is the same for all MT engines, and it is created by any updater
+
+        if "segid" in kwargs :
+                segid = kwargs["segid"]
+        else:
+                segid = "0000"
+        self.log("The server is working on segid: %s" %repr(segid))
+
+        k = self._get_updater_key(segid)
+        if updater_config[k] == None:
+                answerDict = {}
+                answerDict["code"] = "0"
+                answerDict["string"] = "OK, but this engine/updater combination does not manage this request"
+                answerDict["engineName"] = k
+                answerDict["segmentID"] = segid
+
+                data = {"data" : answerDict}
+                self.log("The server is returning: %s" %self._dump_json(data))
+                return self._dump_json(data)
+
+	annotation = self.updater[k].reset()
+        if self.verbose > 0:
+            self.log("The server created this annotation: %s" % annotation)
 
         q = annotation
         if self.verbose > 0:
             self.log("Request Dummy_Input: %s" %repr(q))
-        translation = ""
-        result_queue = Queue.Queue()
-        self.queue_translate.put((result_queue, q))
-        try:
-            if self.timeout and self.timeout > 0:
-               translation = result_queue.get(timeout=self.timeout)
-            else:
-               translation = result_queue.get()
-        except Queue.Empty:
-            return self._timeout_error(q, 'dummy_translation')
-        if self.verbose > 0:
-            self.log("Request after translation of Dummy_Input (NOT USED): %s" %repr(translation))
+        for k in moses.keys():
+            translation = ""
+            result_queue = Queue.Queue()
+            self.queue_translate[k].put((result_queue, segid, q))
+            try:
+                if self.timeout and self.timeout > 0:
+                    name, translation = result_queue.get(timeout=self.timeout)
+                else:
+                    name, translation = result_queue.get()
+            except Queue.Empty:
+                return self._timeout_error(q, 'dummy_translation')
+            if self.verbose > 0:
+                self.log("Request after translation of Dummy_Input (NOT USED): %s" %repr(translation))
 
-        code = "0"
-        string = "OK"
+        answerDict = {}
+        answerDict["code"] = "0"
+        answerDict["string"] = "OK"
 
-        data = {"data" : {"code": code,  "string": string}}
+        data = {"data" : answerDict}
         self.log("The server is returning: %s" %self._dump_json(data))
         return self._dump_json(data)
 
@@ -624,7 +709,17 @@ if __name__ == "__main__":
     parser.add_argument('-port', action='store', help='server port to bind to, default: 8080', type=int, default=8080)
     parser.add_argument('-nthreads', help='number of server threads, default: 8', type=int, default=8)
     parser.add_argument('-moses', dest="moses_path", action='store', help='path to moses executable', default="/home/buck/src/mosesdecoder/moses-cmd/src/moses")
+    parser.add_argument('-moses1', dest="moses1_path", action='store', help='path to an other moses executable', default="")
+    parser.add_argument('-moses2', dest="moses2_path", action='store', help='path to an other moses executable', default="")
+    parser.add_argument('-moses3', dest="moses3_path", action='store', help='path to an other moses executable', default="")
+    parser.add_argument('-moses-name', dest="moses_name", action='store', help='name of the moses engine', default="")
+    parser.add_argument('-moses1-name', dest="moses1_name", action='store', help='name of the additional engine', default="")
+    parser.add_argument('-moses2-name', dest="moses2_name", action='store', help='name of the additional engine', default="")
+    parser.add_argument('-moses3-name', dest="moses3_name", action='store', help='name of the additional engine', default="")
     parser.add_argument('-options', dest="moses_options", action='store', help='moses options, including .ini -async-output -print-id', default="-f phrase-model/moses.ini -v 0 -threads 2 -async-output -print-id")
+    parser.add_argument('-options1', dest="moses1_options", action='store', help='options for the additional moses engine, including .ini -async-output -print-id', default="")
+    parser.add_argument('-options2', dest="moses2_options", action='store', help='options for the additional moses engine, including .ini -async-output -print-id', default="")
+    parser.add_argument('-options3', dest="moses3_options", action='store', help='options for the additional moses engine, including .ini -async-output -print-id', default="")
     parser.add_argument('-prepro', nargs="+", help='complete call to preprocessing script including arguments')
     parser.add_argument('-updater_source_prepro', nargs="+", help='complete call to preprocessing script including arguments for the source text (used for handling update reuqest')
     parser.add_argument('-updater_target_prepro', nargs="+", help='complete call to preprocessing script including arguments for the target text (used for handling update reuqest')
@@ -639,7 +734,17 @@ if __name__ == "__main__":
     parser.add_argument('-verbose', help='verbosity level, default: 0', type=int, default=0)
 
     #configuration file for the updater
-    parser.add_argument('-updater', dest="updater_config", action='store', help='path to the configuration file of the updater', default="XXXXXXXXX")
+    parser.add_argument('-updater', dest="updater_config", action='store', help='path to the configuration file of the updater', default="")
+    parser.add_argument('-updater1', dest="updater1_config", action='store', help='path to the configuration file of the additional updater', default="")
+    parser.add_argument('-updater2', dest="updater2_config", action='store', help='path to the configuration file of the additional updater', default="")
+    parser.add_argument('-updater3', dest="updater3_config", action='store', help='path to the configuration file of the additional updater', default="")
+    parser.add_argument('-updater-name', dest="moses_name", action='store', help='name of the updater', default="")
+    parser.add_argument('-updater1-name', dest="updater1_name", action='store', help='name of the additional updater', default="")
+    parser.add_argument('-updater2-name', dest="updater2_name", action='store', help='name of the additional updater', default="")
+    parser.add_argument('-updater3-name', dest="updater3_name", action='store', help='name of the additional updater', default="")
+
+    #file for mapping serfver ID to specific engine and updater
+    parser.add_argument('-segment2system', dest="segment2system", action='store', help='path to the file containing the map from segment IDs to engine and updater names', default="")
 
     # persistent threads
     thread_options = parser.add_mutually_exclusive_group()
@@ -652,7 +757,92 @@ if __name__ == "__main__":
     if args.logprefix:
         init_log("%s.trans.log" %args.logprefix)
 
-    moses = MosesProc(" ".join((args.moses_path, args.moses_options)))
+    moses = {}
+    if args.moses_name:
+        name = args.moses_name
+    else:
+        name = "Engine_0"
+    moses[name] = MosesProc(" ".join((args.moses_path, args.moses_options)),name)
+    if args.moses1_path != "":
+        if args.moses1_name:
+            name = args.moses1_name
+        else:
+            name = "Engine_1"
+        moses[name] = MosesProc(" ".join((args.moses1_path, args.moses1_options)),name)
+    if args.moses2_path != "":
+        if args.moses2_name:
+            name = args.moses2_name
+        else:
+            name = "Engine_2"
+        moses[name] = MosesProc(" ".join((args.moses2_path, args.moses2_options)),name)
+    if args.moses3_path != "":
+        if args.moses3_name:
+            name = args.moses3_name
+        else:
+            name = "Engine_3"
+        moses[name] = MosesProc(" ".join((args.moses3_path, args.moses3_options)),name)
+
+    for k in moses.keys():
+        sys.stderr.write("k:|%s|\n" %repr(k))
+
+
+
+   updater_config = {}
+    if args.moses_name:
+        name = args.moses_name
+    else:
+        name = "Engine_0"
+    moses[name] = MosesProc(" ".join((args.moses_path, args.moses_options)),name)
+    if args.moses1_path != "":
+        if args.moses1_name:
+            name = args.moses1_name
+        else:
+            name = "Engine_1"
+        moses[name] = MosesProc(" ".join((args.moses1_path, args.moses1_options)),name)
+    if args.moses2_path != "":
+        if args.moses2_name:
+            name = args.moses2_name
+        else:
+            name = "Engine_2"
+        moses[name] = MosesProc(" ".join((args.moses2_path, args.moses2_options)),name)
+    if args.moses3_path != "":
+        if args.moses3_name:
+            name = args.moses3_name
+        else:
+            name = "Engine_3"
+        moses[name] = MosesProc(" ".join((args.moses3_path, args.moses3_options)),name)
+
+
+    updater_config = {}
+    if args.updater_name:
+        name = args.updater_name 
+    else:
+        name = "Updater_0"
+    updater_config[name] = args.updater_config 
+    if args.updater1_config != "":
+        if args.updater1_name:
+            name = args.updater1_name
+        else:
+            name = "Updater_1"
+        updater_config[name] = args.updater1_config 
+    if args.updater2_config != "":
+        if args.updater2_name:
+            name = args.updater2_name
+        else:
+            name = "Updater_2"
+        updater_config[name] = args.updater2_config           
+
+    if args.updater3_config != "":
+        if args.updater3_name:
+            name = args.updater3_name
+        else:
+            name = "Updater_3"
+        updater_config[name] = args.updater3_config           
+
+    for k in updater_config.keys():
+        sys.stderr.write("k:|%s|\n" %repr(k))
+
+    assert (len(moses) == len(updater_config)), "number of engines and updaters does not match"
 
     cherrypy.config.update({'server.request_queue_size' : 1000,
                             'server.socket_port': args.port,
@@ -663,14 +853,16 @@ if __name__ == "__main__":
     if args.logprefix:
         cherrypy.config.update({'log.access_file': "%s.access.log" %args.logprefix,
                                 'log.error_file': "%s.error.log" %args.logprefix})
-    cherrypy.quickstart(Root(moses.source_queue, updater_config = args.updater_config,
+    cherrypy.quickstart(Root(moses, updater_config,
                              prepro_cmd = args.prepro, postpro_cmd = args.postpro,
                              sentence_confidence_cmd = args.sentence_confidence,
                              updater_source_prepro_cmd = args.updater_source_prepro,
 			     updater_target_prepro_cmd = args.updater_target_prepro,
                              slang = args.slang, tlang = args.tlang,
+                             segid_system_map = args.segment2system,
                              pretty = args.pretty,
                              verbose = args.verbose,
                              persistent_processes = persistent_processes))
 
-    moses.close()
+    for k in moses.keys():
+        moses[k].close()

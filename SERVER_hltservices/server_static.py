@@ -11,10 +11,6 @@ import re
 from itertools import izip
 from threading import Timer
 
-from aligner import Aligner_onlineGIZA, Aligner_GIZA, Aligner_IBM1, Aligner_Dummy
-from phrase_extractor import Extractor_Moses, Extractor_Dummy
-from annotate import Annotator_onlinecache
-
 from ConfigParser import SafeConfigParser
 
 def popen(cmd):
@@ -121,48 +117,6 @@ class ReadThread(threading.Thread):
     def log(self, message):
         self.logger.info(message)
 
-class UpdaterProc(object):
-    def __init__(self, config):
-        # parse config file
-        parser = SafeConfigParser()
-        parser.read(config)
-
-	self.Aligner_object = Aligner_onlineGIZA(parser)
-	self.Extractor_object = Extractor_Moses(parser)
-	self.Annotator_object = Annotator_onlinecache(parser)
-        self.logger = logging.getLogger('translation_log.updater')
-
-    def update(self, source="", target=""):
-        # get alignment information for the (source,correction)
-        self.log("ALIGNER_INPUT source: "+str(source))
-        self.log("ALIGNER_INPUT correction: "+str(target))
-        aligner_output = self.Aligner_object.align(source=source,correction=target)
-        self.log("ALIGNER_OUTPUT: "+str(aligner_output))
-
-        # get phrase pairs form the alignment information
-        bias, new, full = self.Extractor_object.extract_phrases(source,target,aligner_output)
-        self.log("BIAS: "+str(bias))
-        self.log("NEW: "+str(new))
-        self.log("FULL: "+str(full))
-
-        self.Annotator_object.cbtm_update(new=new, bias=bias, full=full)
-        self.Annotator_object.cblm_update(target)
-
-        # read and annotate the next sentence
-        dummy_source = ""
-        annotated_source = self.Annotator_object.annotate(dummy_source)
-
-	return annotated_source
-
-    def reset(self):
-        annotated_source = ''
-        annotated_source = annotated_source + '<dlt cblm-command="clear"/>'
-        annotated_source = annotated_source + '<dlt cbtm-command="clear"/>'
-	return annotated_source
-
-    def log(self, message):
-        self.logger.info(message)
-
 class MosesProc(object):
     def __init__(self, cmd):
         self.proc = popen(cmd)
@@ -198,41 +152,27 @@ class Root(object):
     required_params_reset = ["key"]
 
     def __init__(self, queue_moses, updater_config=None, prepro_cmd=None, postpro_cmd=None,
-		 sentence_confidence_cmd=None,
-		 updater_source_prepro_cmd=None, updater_target_prepro_cmd=None,
+        	 sentence_confidence_cmd=None,
 		 slang=None, tlang=None, pretty=False, persistent_processes=False,
                  verbose=0,
 		 timeout=-1):
         self.filter = Filter(remove_newlines=True, collapse_spaces=True)
         self.queue_translate = queue_moses
-        self.updater = None
-
-        if updater_config != None:
-	    self.updater = UpdaterProc(updater_config)
 
         self.prepro_cmd = []
         if prepro_cmd != None:
             self.prepro_cmd = prepro_cmd
 
         self.sentence_confidence_cmd = []
-        self.sentence_confidence_enabled = 0
+	self.sentence_confidence_enabled = 0
         if sentence_confidence_cmd != None:
             self.sentence_confidence_cmd = sentence_confidence_cmd
-            self.sentence_confidence_enabled = 1
-        self.log("sentence_confidence_enabled: %s" % repr(self.sentence_confidence_enabled))
+	    self.sentence_confidence_enabled = 1
+    	self.log("sentence_confidence_enabled: %s" % repr(self.sentence_confidence_enabled))
 
         self.postpro_cmd = []
         if postpro_cmd != None:
             self.postpro_cmd = postpro_cmd
-
-        self.updater_source_prepro_cmd = []
-        if updater_source_prepro_cmd != None:
-            self.updater_source_prepro_cmd = updater_source_prepro_cmd
-
-        self.updater_target_prepro_cmd = []
-        if updater_target_prepro_cmd != None:
-            self.updater_target_prepro_cmd = updater_target_prepro_cmd
-
         self.expected_params_translate = {}
         self.expected_params_update = {}
         self.expected_params_reset = {}
@@ -250,6 +190,7 @@ class Root(object):
         self.pretty = bool(pretty)
         self.timeout = timeout
         self.verbose = verbose
+        self.log("persistent_processes: %s" %repr(self.persist))
 
     def _check_params_translate(self, params):
         errors = []
@@ -365,7 +306,7 @@ class Root(object):
         return query
 
     def _get_sentence_confidence(self, id, source, target):
-        ## force sentence_confidence to be persistent
+	## force sentence_confidence to be persistent
         if not self.persist or not hasattr(cherrypy.thread_data, 'sentence_confidence'):
             if hasattr(cherrypy.thread_data, 'sentence_confidence'):
                 map(pclose, cherrypy.thread_data.sentence_confidence)
@@ -381,32 +322,20 @@ class Root(object):
 
         m = re_match.search(output)
         value = m.group('key')
-        
+
         return value
 
-    def _updater_source_prepro(self, query):
-        if not self.persist or not hasattr(cherrypy.thread_data, 'updater_source_prepro'):
-            if hasattr(cherrypy.thread_data, 'updater_source_prepro'):
-                map(pclose, cherrypy.thread_data.updater_source_prepro)
-            cherrypy.thread_data.updater_source_prepro = map(popen, self.updater_source_prepro_cmd)
-        for proc, cmd in izip(cherrypy.thread_data.updater_source_prepro, self.updater_source_prepro_cmd):
-            query = self._pipe(proc, query)
+    def _cleanMosesPhraseAlignemnt(self, query):
+        pattern = " *\|\d+\-\d+\|"
+        re_passthrough = re.compile(pattern)
+        query = re_passthrough.sub('',query)
         return query
 
-    def _updater_target_prepro(self, query):
-        if not self.persist or not hasattr(cherrypy.thread_data, 'updater_target_prepro'):
-            if hasattr(cherrypy.thread_data, 'updater_target_prepro'):
-                map(pclose, cherrypy.thread_data.updater_target_prepro)
-            cherrypy.thread_data.updater_target_prepro = map(popen, self.updater_target_prepro_cmd)
-        for proc, cmd in izip(cherrypy.thread_data.updater_target_prepro, self.updater_target_prepro_cmd):
-            query = self._pipe(proc, query)
-        return query
-
-    def _getOnlyTranslation(self, query):
+    def _getOnlyTranslation(self, query): 
         pattern = "<passthrough.*?\/>"
         re_passthrough = re.compile(pattern)
-	query = re_passthrough.sub('',query)
-	return query
+        query = re_passthrough.sub('',query)
+        return query
 
     def _getTagValue(self, query, tagname):
         pattern = "<passthrough[^>]*"+tagname+"=\"(?P<key>[^\"]*)\"\/>"
@@ -424,15 +353,9 @@ class Root(object):
 
     def _getPhraseAlignment(self, query):
         return self._getTagValue(query, 'phrase_alignment')
-   
+
     def _getWordAlignment(self, query):
         return self._getTagValue(query, 'word_alignment')
-
-    def _removeXMLTags(self, query):
-        pattern = "<[^>]*?>"
-        re_tags = re.compile(pattern)
-        query = re_tags.sub('',query)
-        return query
 
     def _dump_json(self, data):
         if self.pretty:
@@ -469,16 +392,15 @@ class Root(object):
             except Queue.Empty:
                 return self._timeout_error(q, 'translation')
 
-        if self.verbose > 0:
-            self.log("Translation before sentence-level confidence estimation: %s" %translation)
-            self.log("Source before sentence-level confidence estimation: %s" %q)
-
         sentenceConfidence = None
         if self.sentence_confidence_enabled == 1:
             if self.verbose > 0:
                self.log("Translation before sentence-level confidence estimation: %s" %translation)
                self.log("Source before sentence-level confidence estimation: %s" %q)
-            sentenceConfidence = self._get_sentence_confidence("ID", q, translation)
+            source = self._getOnlyTranslation(q)
+            target = self._getOnlyTranslation(translation)
+	    target = self._cleanMosesPhraseAlignemnt(target)
+            sentenceConfidence = self._get_sentence_confidence("ID", source, target)
             if self.verbose > 0:
                self.log("Sentence Confidence: %s" %sentenceConfidence)
                self.log("Translation after postprocessing: %s" %translation)
@@ -488,7 +410,7 @@ class Root(object):
         translation = self._postpro(translation)
         if self.verbose > 0:
             self.log("Translation after postprocessing: %s" %translation)
-
+    
 	translation, phraseAlignment = self._getPhraseAlignment(translation)
         if self.verbose > 1:
             self.log("Phrase alignment: %s" %str(phraseAlignment))
@@ -512,8 +434,8 @@ class Root(object):
 		translationDict["wordAlignment"] = wordAlignment
         if self.sentence_confidence_enabled == 1:
                 self.log("sentence_confidence_enabled: passed")
-                if sentenceConfidence:
-                        translationDict["sentence_confidence"] = sentenceConfidence
+		if sentenceConfidence:
+                	translationDict["sentence_confidence"] = sentenceConfidence
 
         data = {"data" : {"translations" : [translationDict]}}
         self.log("The server is returning: %s" %self._dump_json(data))
@@ -531,46 +453,16 @@ class Root(object):
 
 	source = kwargs["segment"]
 	target = kwargs["translation"]
-        self.log("The server is updating, segment: %s" %repr(source))
-        self.log("The server is updating, translation: %s" %repr(target))
-
-        source = self._updater_source_prepro(self.filter.filter(source))
-        target = self._updater_target_prepro(self.filter.filter(target))
-        self.log("The server is updating, after preprocessing segment: %s" %repr(source))
-        self.log("The server is updating, after preprocessing translation: %s" %repr(target))
+        self.log("The server is working on update, segment: %s" %repr(source))
+        self.log("The server is working on update, translation: %s" %repr(target))
 
         if "extra" in kwargs :
                 extra = kwargs["extra"]
                 self.log("The server is working on update, extra: %s" %repr(extra))
 
- 	source=self._removeXMLTags(source)
- 	source=source.encode("utf-8")
- 	target=self._removeXMLTags(target)
- 	target=target.encode("utf-8")
-
-        annotation = self.updater.update(source=source, target=target)
-        self.log("The server created this annotation: %s from the current segment and translation" % annotation)
-
-        annotation=annotation.decode("utf-8")
-
-        q = annotation
-        if self.verbose > 0:
-            self.log("Request Dummy_Input: %s" %repr(q))
-        translation = ""
-        result_queue = Queue.Queue()
-        self.queue_translate.put((result_queue, q))
-        try:
-	    if self.timeout and self.timeout > 0:
-               translation = result_queue.get(timeout=self.timeout)
-            else:
-               translation = result_queue.get()
-        except Queue.Empty:
-            return self._timeout_error(q, 'dummy_translation')
-        if self.verbose > 0:
-            self.log("Request after translation of Dummy_Input (NOT USED): %s" %repr(translation))
 
 	code = "0"
-	string = "OK"
+	string = "OK, but this server does not manage user feedback"
 
         data = {"data" : {"code": code,  "string": string}}
         self.log("The server is returning: %s" %self._dump_json(data))
@@ -626,8 +518,6 @@ if __name__ == "__main__":
     parser.add_argument('-moses', dest="moses_path", action='store', help='path to moses executable', default="/home/buck/src/mosesdecoder/moses-cmd/src/moses")
     parser.add_argument('-options', dest="moses_options", action='store', help='moses options, including .ini -async-output -print-id', default="-f phrase-model/moses.ini -v 0 -threads 2 -async-output -print-id")
     parser.add_argument('-prepro', nargs="+", help='complete call to preprocessing script including arguments')
-    parser.add_argument('-updater_source_prepro', nargs="+", help='complete call to preprocessing script including arguments for the source text (used for handling update reuqest')
-    parser.add_argument('-updater_target_prepro', nargs="+", help='complete call to preprocessing script including arguments for the target text (used for handling update reuqest')
     parser.add_argument('-postpro', nargs="+", help='complete call to postprocessing script including arguments')
     parser.add_argument('-sentence_confidence', nargs="+", help='complete call to sentence-level confidence estiamtion script including arguments')
     parser.add_argument('-pretty', action='store_true', help='pretty print json')
@@ -666,8 +556,6 @@ if __name__ == "__main__":
     cherrypy.quickstart(Root(moses.source_queue, updater_config = args.updater_config,
                              prepro_cmd = args.prepro, postpro_cmd = args.postpro,
                              sentence_confidence_cmd = args.sentence_confidence,
-                             updater_source_prepro_cmd = args.updater_source_prepro,
-			     updater_target_prepro_cmd = args.updater_target_prepro,
                              slang = args.slang, tlang = args.tlang,
                              pretty = args.pretty,
                              verbose = args.verbose,
