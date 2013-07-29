@@ -269,7 +269,7 @@ class Root(object):
         self.segid_updater_map = None
         if segid_system_map != "":
             self.log("Reading map from segment IDs to engine and updater names: |%s|" % segid_system_map)
-            self._set_segment2systems_map(segid_system_map)
+            self._set_segment2system_map(segid_system_map)
         else:
             self.log("No map from segment IDs to engine and updater names is available")
 
