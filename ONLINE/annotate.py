@@ -1,5 +1,22 @@
 #!/usr/bin/python
 
+## [annotation]
+## cblm_constrained_on_cbtm: 1 if cblm suggestions come from the target side of the cbtm suggestions, and not from n-grams
+## 			     0 if cblm suggestions come n-grams, and not from the target side of the cbtm suggestions
+##			     (default is 0)
+## cblm_improved_by_cbtm: 1 if cblm suggestions also come from the target side of the cbtm suggestions (the full target sentence is also added)
+##                        0 otherwise
+##			     (default is 0)
+## cblm_improved_by_full_sentence: 1 if cblm suggestion also include the full target sentence
+##                                 0 otherwise (it is still possible that the full target sentence is included, if it is already included in the cbtm suggestions)
+##			     (default is 0)
+
+## note that duplicate suggestions are inserted only once
+
+## Parameters valid for annotator_type=onlinexml only
+## cbtm_best:	1	suggest only the phrase pair the the highest probability
+##		0	otherwise
+
 import sys, getopt, logging
 
 def read_file(fn):
@@ -54,12 +71,29 @@ class Annotator_onlinexml:
                         logging.info("CBTM annotation is not active")
 
                 self.factor = float(parser.get('annotation', 'factor'))
+
         	try:
                 	parser.get('annotation', 'cblm_constrained_on_cbtm')
         	except:
                 	parser.set('annotation', 'cblm_constrained_on_cbtm', '0')
 	        logging.info("cblm_constrained_on_cbtm: "+parser.get('annotation', 'cblm_constrained_on_cbtm'))
                 self.cblm_constrained_on_cbtm = int(parser.get('annotation', 'cblm_constrained_on_cbtm'))
+
+                try:
+                        parser.get('annotation', 'cblm_improved_by_cbtm')
+                except:
+                        parser.set('annotation', 'cblm_improved_by_cbtm', '0')
+                logging.info("cblm_improved_by_cbtm: "+parser.get('annotation', 'cblm_improved_by_cbtm'))
+                self.cblm_improved_by_cbtm = int(parser.get('annotation', 'cblm_improved_by_cbtm'))
+
+                try:
+                        parser.get('annotation', 'cblm_improved_by_full_sentence')
+                except:
+                        parser.set('annotation', 'cblm_improved_by_full_sentence', '0')
+                logging.info("cblm_improved_by_full_sentence: "+parser.get('annotation', 'cblm_improved_by_full_sentence'))
+                self.cblm_improved_by_full_sentence = int(parser.get('annotation', 'cblm_improved_by_full_sentence'))
+
+
 
                 try:
                         parser.get('annotation', 'cbtm_best')
@@ -71,7 +105,8 @@ class Annotator_onlinexml:
 		self.n=int(parser.get('annotation', 'cblm_n_gram_level'))
                 logging.info("n: "+str(self.n))
 
-                self.filter=parser.get('annotation', 'cblm_filter')
+                self.cblm_filter=parser.get('annotation', 'cblm_filter')
+                self.cbtm_filter=parser.get('annotation', 'cbtm_filter')
                 self.stopwords_source = [l.strip() for l in open(parser.get('data', 'stopwords_source'))]
                 self.stopwords_target = [l.strip() for l in open(parser.get('data', 'stopwords_target'))]
 
@@ -128,10 +163,24 @@ class Annotator_onlinexml:
                 """
 		sentence = sentence.strip()
 		n = self.n
+                add_to_cache = []
+                n_grams = []
+
+## (optionally) add all target phrases suggested to the cbtm
+                if int(self.cblm_improved_by_cbtm) == 1:
+                        n_grams = self.cblm_phrases
+
+## (optionally) add the full sentence 
+                if int(self.cblm_improved_by_full_sentence) == 1:
+                        if not sentence in n_grams:
+                                n_grams.append(sentence)
+
                 if int(self.cblm_constrained_on_cbtm) == 1:
-                        add_to_cache = self.cblm_phrases
+## add only target phrases suggested to the cbtm
+                        for ng in self.cblm_phrases:
+                                n_grams.append(ng)
                 else:
-                        n_grams = []
+## add all n-grams
                         tokens = sentence.split()
                         while n:
                                 for i in range(len(tokens)-n+1):
@@ -140,24 +189,20 @@ class Annotator_onlinexml:
                                                 n_grams.append(entry)
                                 n -= 1
 
-                        if int(self.filter) == 1:
-                                #filter out n-grams that only contain stopwords, numbers and tokens
-                                #consisting of more than one character
-                                add_to_cache = []
-                                for ng in n_grams:
-                                        for t in ng.split():
-                                                ##if len(t) > 1 and not ng.lower() in self.stopwords_target and not ng.isdigit():
-                                                if len(t) > 1 and not t.lower() in self.stopwords_target and not t.isdigit():
-                                                        if not ng in add_to_cache:
-                                                                add_to_cache.append(ng)
-                                                        break
-                        
-                        else:
-                                add_to_cache = n_grams
+                if int(self.cblm_filter) == 1:
+                        #filter out n-grams that only contain stopwords, numbers and tokens
+                        #consisting of more than one character
+                        for ng in n_grams:
+                                for t in ng.split():
+                                        if len(t) > 1 and not ng.lower() in self.stopwords_target and not ng.isdigit():
+                                                if not ng in add_to_cache:
+                                                        add_to_cache.append(ng)
+                                                break
+                else:
+                        for ng in n_grams:
+                                if not ng in add_to_cache:
+                                        add_to_cache.append(ng)
 
-		#always add the full sentence
-                add_to_cache.append(sentence)
-                
                 if not add_to_cache:
                         return ''
                 else:
@@ -203,9 +248,11 @@ class Annotator_onlinexml:
                                 phrase = ' '.join(n_gram)
 
                                 #stopword translations are often based on incorrect alignments
-                                #(garbage collectors)
-                                if not [w for w in n_gram if not (w.isdigit() or w.lower() in self.stopwords_source or len(w) < 2)]:
-                                        continue
+                                #(garbage collectors
+                                if int(self.cbtm_filter) == 1:
+					## filter out phrase pair, if the source side is composed only by  words (<2), stopwords, or digits 
+	                                if not [w for w in n_gram if not (w.isdigit() or w.lower() in self.stopwords_source or len(w) < 2)]:
+        	                                continue
                                         
                                 freq_dict = {"full": {}, "new": {}, "bias": {}}
                                 count = {"full": 0., "new": 0., "bias": 0.}
@@ -296,16 +343,24 @@ class Annotator_onlinecache:
                 self.cblm_constrained_on_cbtm = int(parser.get('annotation', 'cblm_constrained_on_cbtm'))
 
                 try:
-                        parser.get('annotation', 'cbtm_best')
+                        parser.get('annotation', 'cblm_improved_by_cbtm')
                 except:
-                        parser.set('annotation', 'cbtm_best', 'False')
-                self.cbtm_best = parser.get('annotation', 'cbtm_best')
-                logging.info("cbtm_best: "+self.cbtm_best)
+                        parser.set('annotation', 'cblm_improved_by_cbtm', '0')
+                logging.info("cblm_improved_by_cbtm: "+parser.get('annotation', 'cblm_improved_by_cbtm'))
+                self.cblm_improved_by_cbtm = int(parser.get('annotation', 'cblm_improved_by_cbtm'))
+                
+                try:
+                        parser.get('annotation', 'cblm_improved_by_full_sentence')
+                except:
+                        parser.set('annotation', 'cblm_improved_by_full_sentence', '0')
+                logging.info("cblm_improved_by_full_sentence: "+parser.get('annotation', 'cblm_improved_by_full_sentence'))
+                self.cblm_improved_by_full_sentence = int(parser.get('annotation', 'cblm_improved_by_full_sentence'))
 
                 self.n=int(parser.get('annotation', 'cblm_n_gram_level'))
                 logging.info("n: "+str(self.n))
 
-                self.filter=parser.get('annotation', 'cblm_filter')
+                self.cblm_filter=parser.get('annotation', 'cbtm_filter')
+                self.cbtm_filter=parser.get('annotation', 'cblm_filter')
                 self.stopwords_source = [l.strip() for l in open(parser.get('data', 'stopwords_source'))]
                 self.stopwords_target = [l.strip() for l in open(parser.get('data', 'stopwords_target'))]
 
@@ -367,10 +422,24 @@ class Annotator_onlinecache:
 		"""
                 sentence = sentence.strip()
                 n = self.n
+                add_to_cache = []
+		n_grams = []
+
+## (optionally) add all target phrases suggested to the cbtm
+                if int(self.cblm_improved_by_cbtm) == 1:
+                        n_grams = self.cblm_phrases
+
+## (optionally) add the full sentence 
+                if int(self.cblm_improved_by_full_sentence) == 1:
+                        if not sentence in n_grams:
+                                n_grams.append(sentence)
+
 		if int(self.cblm_constrained_on_cbtm) == 1:
-			add_to_cache = self.cblm_phrases
+## add only target phrases suggested to the cbtm
+        		for ng in self.cblm_phrases:
+				n_grams.append(ng)
 		else:
-			n_grams = []
+## add all n-grams
 			tokens = sentence.split()
 			while n:
 				for i in range(len(tokens)-n+1):
@@ -379,19 +448,21 @@ class Annotator_onlinecache:
                 	                	n_grams.append(entry)
 				n -= 1
 
-			if int(self.filter) == 1:
-				#filter out n-grams that only contain stopwords, numbers and tokens
-				#consisting of more than one character
-				add_to_cache = []
-        			for ng in n_grams:
-                			for t in ng.split():
-                        			if len(t) > 1 and not ng.lower() in self.stopwords_target and not ng.isdigit():
-                                			if not ng in add_to_cache:
-                                				add_to_cache.append(ng)
-                        	        		break
-			
-			else:
-				add_to_cache = n_grams
+		if int(self.cblm_filter) == 1:
+			#filter out n-grams that only contain stopwords, numbers and tokens
+			#consisting of more than one character
+        		for ng in n_grams:
+                		for t in ng.split():
+                       			if len(t) > 1 and not ng.lower() in self.stopwords_target and not ng.isdigit():
+                               			if not ng in add_to_cache:
+                               				add_to_cache.append(ng)
+                       	        		break
+		else:
+        		for ng in n_grams:
+                               	if not ng in add_to_cache:
+					add_to_cache.append(ng)
+
+                logging.info("inside CBLM_CACHE "+repr(add_to_cache))
 		
 		if not add_to_cache:
 			return ''
@@ -414,23 +485,28 @@ class Annotator_onlinecache:
 		for type in ["full", "new", "bias"]:
 			type_phrases = self.phrases[type]
 			for source in type_phrases:
-				insert=0
-				for s in source.split():
-                                        if len(s) > 1 and not s.lower() in self.stopwords_source and not s.isdigit():
-						insert=1
-						break
-				if insert == 0:
-					continue
+
+				if int(self.cbtm_filter) == 1:
+					## filter out phrase pair, if composed only by short words (<2), stopwords, or digits, in both source and target side
+					insert=0
+					for s in source.split():
+                                        	if len(s) > 1 and not s.lower() in self.stopwords_source and not s.isdigit():
+							insert=1
+							break
+					if insert == 0:
+						continue
+
 
 				target_phrases = type_phrases[source]
 				for target in target_phrases:
-					insert=0
-					for t in target.split():
-                                        	if len(t) > 1 and not t.lower() in self.stopwords_target and not t.isdigit():
-							insert=1
-                                                        break
- 	                                if insert == 0:
-        	                                continue
+	                                if int(self.cbtm_filter) == 1:
+						insert=0
+						for t in target.split():
+                	                        	if len(t) > 1 and not t.lower() in self.stopwords_target and not t.isdigit():
+								insert=1
+                                	                        break
+						if insert == 0:
+        	                               		continue
  
 					phrasepair = source + "|||" + target
 					if not phrasepair in cbtm_phrases:
