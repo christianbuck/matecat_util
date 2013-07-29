@@ -76,7 +76,6 @@ class Decoder_Moses:
 	        # set default parameters (if needed)
 	        default_decoder_options = "-xml-input inclusive"
 	        default_decoder_options = default_decoder_options + " -use-persistent-cache false"
-	        default_decoder_options = default_decoder_options + " -print-translation-option true"
 	        try:
 	                self.parser.get('decoder', 'options')
 	        except:
@@ -153,6 +152,94 @@ class Decoder_Moses:
 					err.append(line+'\n')
 
 		return out, "".join(err)
+
+class Decoder_Moses_nbest:
+        """
+        Opens an instance of the decoder specified in path as a subprocess 
+        and handles communication, i.e. sending input and parsing output.
+        """
+        def __init__(self, parser):
+                """
+                Start a new decoder with the specified command line arguments.
+                """
+                self.parser = parser
+
+                # set default parameters (if needed)
+
+                # set default parameters (if needed)
+                default_decoder_options = "-xml-input inclusive"
+                default_decoder_options = default_decoder_options + " -use-persistent-cache false"
+                default_decoder_options = default_decoder_options + " -print-translation-option true"
+                try:
+                        self.parser.get('decoder', 'options')
+                except:
+                        self.parser.set('decoder', 'options', '')
+                try:
+                        self.parser.get('decoder', 'verbosity')
+                except:
+                        self.parser.set('decoder', 'verbosity', '1')
+
+                decoder_options = self.parser.get('decoder', 'options')
+                if decoder_options:
+                        decoder_options = decoder_options + " "
+
+                decoder_options = decoder_options + default_decoder_options
+                decoder_options_list = decoder_options.split(' ')
+
+                logging.info("MAIN decoder_options:|"+decoder_options+"|")
+                logging.info("MAIN decoder_options_list|"+str(decoder_options_list)+"|")
+
+                self.path = parser.get('decoder', 'path')
+                decoder_args = ("-f", parser.get('decoder', 'ini'),
+                                "-v", parser.get('decoder', 'verbosity'))
+                logging.info("MAIN decoder_path:|"+str(self.path)+"|")
+                logging.info("MAIN decoder_args:|"+str(decoder_args)+"|")
+
+                self.decoder_args_list = list(decoder_args)
+                self.decoder_args_list.extend(decoder_options_list)
+                decoder_args = tuple(self.decoder_args_list)
+
+                logging.info("DECODER_CALL:|"+self.path+' '+" ".join(self.decoder_args_list)+"|")
+
+                self.decoder = subprocess.Popen([self.path]+self.decoder_args_list,
+                        stdin=subprocess.PIPE,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
+                        shell=False)
+
+#pattern to match in order to know that all output related to one sentence has been produced
+#               self.out_signal_pattern = re.compile("^BEST TRANSLATION:\s*")
+                self.out_signal_pattern = re.compile("Line [0-9]+: Translation took [0-9\.]+ seconds total")
+
+#pattern to match in order to know that the output related to one sentence starts
+                self.in_signal_pattern = re.compile("Translating line [0-9]+")
+
+        def communicate(self, in_line):
+                """
+                Return output and error of the decoder for the given input.
+                """
+                self.decoder.stdin.write(in_line+'\n')
+                err = []
+                nbest = []
+
+                while True:
+                        line = self.decoder.stdout.readline().strip()
+                        if self.in_signal_pattern.search(line):
+                                err.append(line+'\n')
+                                break
+
+                while True:
+                        line = self.decoder.stdout.readline().strip()
+                        if not self.out_signal_pattern.search(line):
+                                # err line before output
+                                if "|||" in line:
+                                        nbest.append(line)
+                                else:
+                                        err.append(line+'\n')
+                        else:
+                                break
+
+                return nbest, "".join(err)
 
 def usage():
         """

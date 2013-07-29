@@ -1,7 +1,7 @@
 
 import sys, logging, os
 import codecs, subprocess, select, re, logging
-from decoder import Decoder_Moses, Decoder_Deterministic 
+from decoder import Decoder_Moses, Decoder_Moses_nbest, Decoder_Deterministic 
 from aligner import Aligner_GIZA, Aligner_onlineGIZA, Aligner_Constrained_Search, Aligner_IBM1, Aligner_Dummy
 from phrase_extractor import Extractor_Moses, Extractor_Constrained_Search, Extractor_Dummy
 from annotate import Annotator_onlinexml, Annotator_onlinecache
@@ -32,10 +32,12 @@ if __name__ == "__main__":
 
 	input = open(parser.get('data', 'source'), 'r')
 	edit = open(parser.get('data', 'reference'), 'r')
-
+        NBESTSIZE=200
 
 	if decoder_type == "Moses" :
         	Decoder_object = Decoder_Moses(parser)
+	elif decoder_type == "Moses_nbest" :
+        	Decoder_object = Decoder_Moses_nbest(parser)
 	elif decoder_type == "Deterministic" :
 	        Decoder_object = Decoder_Deterministic(parser)
 	else:
@@ -46,9 +48,11 @@ if __name__ == "__main__":
         	Aligner_object = Aligner_GIZA(parser)
         elif aligner_type == "onlineGIZA" :
                 Aligner_object = Aligner_onlineGIZA(parser)
+        elif aligner_type == "IBM1" :
+                Aligner_object = Aligner_IBM1(parser)
         elif aligner_type == "Constrained_Search" :
         	Aligner_object = Aligner_Constrained_Search(parser)
-		if not decoder_type == "Moses":
+		if not decoder_type == "Moses" and not decoder_type == "Moses_nbest":
                 	logging.info("This alignment tool requires Moses as decoder")
                 	sys.exit(1)
         elif aligner_type == "Dummy" :
@@ -81,15 +85,26 @@ if __name__ == "__main__":
 	source = input.readline().strip()
 	annotated_source = source
 	s_id = 1
+
 	while source:
 		logging.info(str(s_id))
 		# talk to decoder
 		logging.info("DECODER_IN: "+annotated_source)
-		decoder_out, decoder_err = Decoder_object.communicate(annotated_source)
-		logging.info("DECODER_OUT: "+decoder_out)
-		# write translation to stdout
-		sys.stdout.write(decoder_out+'\n')
-		sys.stdout.flush()
+		if decoder_type == "Moses" :
+	                decoder_out, decoder_err = Decoder_object.communicate(annotated_source)
+        	        logging.info("DECODER_OUT: "+decoder_out)
+
+                	# write translation to stdout
+             		sys.stdout.write(decoder_out+'\n')
+             		sys.stdout.flush()
+
+        	elif decoder_type == "Moses_nbest" :
+                	decoder_nbest, decoder_err = Decoder_object.communicate(annotated_source)
+
+	                # write translation to stdout
+	                sys.stdout.write('\n'.join(decoder_nbest)+'\n')
+	                sys.stdout.flush()
+
 		# now the reference is available
 		correction = edit.readline().strip()
 		logging.info("SOURCE: "+source)
@@ -97,7 +112,7 @@ if __name__ == "__main__":
 
 		# get alignment information for the (source,correction)
 		aligner_output = Aligner_object.align(source=source,correction=correction,moses_translation_options=decoder_err)
-		logging.info("ALIGNER_OUTPUT: "+str(aligner_output))
+		logging.info("ALIGNER_OUTPUT: "+repr(aligner_output))
 
 		# get phrase pairs form the alignment information
 		bias, new, full = Extractor_object.extract_phrases(source,correction,aligner_output)
