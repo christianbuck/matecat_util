@@ -85,8 +85,7 @@ class Aligner_Constrained_Search:
                 logging.info("SEARCHER_ERR: "+str(err))
 
                 # remove temporary files
-                os.remove(crt_file)
-		os.remove(opt_file)
+                os.remove(crt_file), os.remove(opt_file)
                 return alignment.strip()
 
 class Aligner_onlineGIZA:
@@ -144,7 +143,10 @@ class Aligner_onlineGIZA:
                         stdout=subprocess.PIPE,
                         stderr=self.log_t2s,
                         shell=False)
+                logging.info("SYMAL_CALL:|"+self.symal+' '+self.symtype+"|")
+                self.symal_proc = subprocess.Popen([self.symal]+self.symtype.split(),  stdin=subprocess.PIPE,  stdout=subprocess.PIPE)
 
+ 
         def align(self, source="", target="", correction="", moses_translation_options=""):
 		err = []
                 logging.info("SEARCHER source:"+source)
@@ -156,36 +158,34 @@ class Aligner_onlineGIZA:
 		aligner_input_trg2src = aligner_input_trg2src.lower()
 		rr = str(random.randint(0,1000000))
 
-#Source-Target		
-                logging.info("ALIGNER input:"+aligner_input_src2trg)
-                logging.info("ALIGNER input:"+aligner_input_trg2src)
+#Source-Target          
+                logging.info("ALIGNER input s2t:"+aligner_input_src2trg)
+                logging.info("ALIGNER input t2s:"+aligner_input_trg2src)
                 self.aligner_s2t.stdin.write(aligner_input_src2trg+'\n')
-		self.aligner_s2t.stdout.flush()
+                self.aligner_s2t.stdout.flush()
 
-                sentence_id = self.aligner_s2t.stdout.readline().strip()
-                target_str = self.aligner_s2t.stdout.readline().strip()
-                align_src2trg = self.aligner_s2t.stdout.readline().strip()
+                response_src2trg = self.aligner_s2t.stdout.readline().strip() + '\n'
+                response_src2trg = response_src2trg + self.aligner_s2t.stdout.readline().strip() + '\n'
+                response_src2trg = response_src2trg + self.aligner_s2t.stdout.readline().strip() + '\n'
 
                 align_src2trg_file = self.tmpdir+"/_s2t"+str(os.getpid())+"_"+rr
-                append_to_file(align_src2trg_file, sentence_id+'\n')
-                append_to_file(align_src2trg_file, correction+'\n')
-                append_to_file(align_src2trg_file, align_src2trg+'\n')
+                write_to_file(align_src2trg_file, response_src2trg)
 
-#Target-Source		
+                logging.info("ALIGNER output s2t:"+response_src2trg)
+#Target-Source          
                 self.aligner_t2s.stdin.write(aligner_input_trg2src+'\n')
-		self.aligner_t2s.stdout.flush()
+                self.aligner_t2s.stdout.flush()
 
-                sentence_id = self.aligner_t2s.stdout.readline().strip()
-                source_str = self.aligner_t2s.stdout.readline().strip()
-                align_trg2src = self.aligner_t2s.stdout.readline().strip()
+                response_trg2src = self.aligner_t2s.stdout.readline().strip() + '\n'
+                response_trg2src = response_trg2src + self.aligner_t2s.stdout.readline().strip() + '\n'
+                response_trg2src = response_trg2src + self.aligner_t2s.stdout.readline().strip() + '\n'
 
                 align_trg2src_file = self.tmpdir+"/_t2s"+str(os.getpid())+"_"+rr
-                append_to_file(align_trg2src_file, sentence_id+'\n')
-                append_to_file(align_trg2src_file, source+'\n')
-                append_to_file(align_trg2src_file, align_trg2src+'\n')
+                write_to_file(align_trg2src_file, response_trg2src)
+                logging.info("ALIGNER output t2s:"+response_trg2src)
 
 #create the giza2bal 
-	        giza2bal_options = "-d " + align_src2trg_file + " -i " + align_trg2src_file
+	        giza2bal_options = "-d " + align_trg2src_file + " -i " + align_src2trg_file
                 giza2bal_proc = subprocess.Popen([self.giza2bal]+ giza2bal_options.split(),  stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 		giza2bal_align1 = giza2bal_proc.stdout.readline().strip()
 		giza2bal_align2 = giza2bal_proc.stdout.readline().strip()
@@ -195,15 +195,11 @@ class Aligner_onlineGIZA:
 
 
 #symmetrize the alignments
-                logging.info("SYMAL_CALL:|"+self.symal+' '+self.symtype+"|")
-                symal_proc = subprocess.Popen([self.symal]+self.symtype.split(),  stdin=subprocess.PIPE,  stdout=subprocess.PIPE)
+		self.symal_proc.stdin.write(giza2bal_align1+'\n')
+		self.symal_proc.stdin.write(giza2bal_align2+'\n')
+		self.symal_proc.stdin.write(giza2bal_align3+'\n')
 
-		symal_proc.stdin.write(giza2bal_align1+'\n')
-		symal_proc.stdin.write(giza2bal_align2+'\n')
-		symal_proc.stdin.write(giza2bal_align3+'\n')
-
-	
-                alignment = symal_proc.stdout.readline().strip()
+                alignment = self.symal_proc.stdout.readline().strip()
                 logging.info("SYMAL_OUT: "+alignment.strip())
 
 # remove source and target strings	
@@ -211,8 +207,7 @@ class Aligner_onlineGIZA:
                 logging.info("SYMAL_OUT after string replacement: "+alignment.strip())
 
                 # remove temporary files
-#                os.remove(align_src2trg_file)
-#		os.remove(align_trg2src_file)
+                os.remove(align_src2trg_file), os.remove(align_trg2src_file)
                 return alignment.strip()
 
 
@@ -266,8 +261,7 @@ class Aligner_GIZA:
 		logging.info("SEARCHER_ERR: "+str(err))
 
 		# remove temporary files
-		os.remove(crt_file)
-		os.remove(src_file)
+		os.remove(crt_file), os.remove(src_file)
 		return alignment.strip()
 
 class Aligner_IBM1:
