@@ -3,6 +3,7 @@
 
 import sys, logging, os
 import codecs, subprocess, select, re
+import random
 from collections import defaultdict
 from itertools import imap
 
@@ -70,9 +71,10 @@ class Aligner_Constrained_Search:
                 logging.info("EXTRACTOR_ERR: "+str(err))
 
                 # write reference and translation options to temporary files
-                crt_file = self.tmpdir+"/_crt"+str(os.getpid())
+		rr = str(random.randint(0,1000000))
+                crt_file = self.tmpdir+"/_crt"+str(os.getpid())+"_"+rr
                 write_to_file(crt_file, correction+'\n')
-                opt_file = self.tmpdir+"/_opt"+str(os.getpid())
+                opt_file = self.tmpdir+"/_opt"+str(os.getpid())+"_"+rr
                 write_to_file(opt_file, options)
 
                 # call constrained search script
@@ -83,7 +85,8 @@ class Aligner_Constrained_Search:
                 logging.info("SEARCHER_ERR: "+str(err))
 
                 # remove temporary files
-                os.remove(crt_file), os.remove(opt_file)
+                os.remove(crt_file)
+		os.remove(opt_file)
                 return alignment.strip()
 
 class Aligner_onlineGIZA:
@@ -151,6 +154,7 @@ class Aligner_onlineGIZA:
                 aligner_input_trg2src = "<src>" + source + "</src><trg>" + correction + "</trg>"
 		aligner_input_src2trg = aligner_input_src2trg.lower()
 		aligner_input_trg2src = aligner_input_trg2src.lower()
+		rr = str(random.randint(0,1000000))
 
 #Source-Target		
                 logging.info("ALIGNER input:"+aligner_input_src2trg)
@@ -162,7 +166,7 @@ class Aligner_onlineGIZA:
                 target_str = self.aligner_s2t.stdout.readline().strip()
                 align_src2trg = self.aligner_s2t.stdout.readline().strip()
 
-                align_src2trg_file = self.tmpdir+"/_s2t"+str(os.getpid())
+                align_src2trg_file = self.tmpdir+"/_s2t"+str(os.getpid())+"_"+rr
                 append_to_file(align_src2trg_file, sentence_id+'\n')
                 append_to_file(align_src2trg_file, correction+'\n')
                 append_to_file(align_src2trg_file, align_src2trg+'\n')
@@ -175,7 +179,7 @@ class Aligner_onlineGIZA:
                 source_str = self.aligner_t2s.stdout.readline().strip()
                 align_trg2src = self.aligner_t2s.stdout.readline().strip()
 
-                align_trg2src_file = self.tmpdir+"/_t2s"+str(os.getpid())
+                align_trg2src_file = self.tmpdir+"/_t2s"+str(os.getpid())+"_"+rr
                 append_to_file(align_trg2src_file, sentence_id+'\n')
                 append_to_file(align_trg2src_file, source+'\n')
                 append_to_file(align_trg2src_file, align_trg2src+'\n')
@@ -207,7 +211,8 @@ class Aligner_onlineGIZA:
                 logging.info("SYMAL_OUT after string replacement: "+alignment.strip())
 
                 # remove temporary files
-                os.remove(align_src2trg_file), os.remove(align_trg2src_file)
+#                os.remove(align_src2trg_file)
+#		os.remove(align_trg2src_file)
                 return alignment.strip()
 
 
@@ -242,9 +247,10 @@ class Aligner_GIZA:
 		logging.info("SEARCHER correction:"+correction)
 		# extract translation options from Moses output
 		# write target and source to temporary files
-		crt_file = self.tmpdir+"/_crt"+str(os.getpid())
+		rr = str(random.randint(0,1000000))
+		crt_file = self.tmpdir+"/_crt"+str(os.getpid())+"_"+rr
 		write_to_file(crt_file, correction+'\n')
-		src_file = self.tmpdir+"/_src"+str(os.getpid())
+		src_file = self.tmpdir+"/_src"+str(os.getpid())+"_"+rr
 		write_to_file(src_file, source+'\n')
 
 		# call constrained search script
@@ -260,7 +266,8 @@ class Aligner_GIZA:
 		logging.info("SEARCHER_ERR: "+str(err))
 
 		# remove temporary files
-		os.remove(crt_file), os.remove(src_file)
+		os.remove(crt_file)
+		os.remove(src_file)
 		return alignment.strip()
 
 class Aligner_IBM1:
