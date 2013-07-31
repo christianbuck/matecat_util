@@ -156,7 +156,7 @@ class Root(object):
     required_params_update = ["key", "segment", "translation", "target", "source"]
     required_params_reset = ["key"]
 
-    def __init__(self, moses, updater_config=None, prepro_cmd=None, postpro_cmd=None,
+    def __init__(self, moses, prepro_cmd=None, postpro_cmd=None,
         	 sentence_confidence_cmd=None,
 		 slang=None, tlang=None, pretty=False, persistent_processes=False,
 		 segid_system_map="",
@@ -168,10 +168,11 @@ class Root(object):
         self.log("_get_engine_key self.engines_N:|%d|" % self.engines_N)
 
         self.queue_translate = {}
-        self.engine_name = []
+        self.system_name = []
         for k in sorted(moses.keys()):
+            self.log("_get_engine_key k::|%s|" % k)
             self.queue_translate[k] = moses[k].source_queue
-            self.engine_name.append(k)
+            self.system_name.append(k)
 
         self.prepro_cmd = []
         if prepro_cmd != None:
@@ -229,7 +230,7 @@ class Root(object):
 
         map = open(file, 'r')
 #format of each line
-#segment_id engine_name 
+#segment_id system_name 
 
 	self.segid_engine_map = {}
         line = map.readline().strip()	
@@ -242,13 +243,13 @@ class Root(object):
         if self.segid_engine_map != None:
 	    if not segid in self.segid_engine_map:
 	         self.log("Segment id is not present in the map. Use the first available engine")
-	         name = self.engine_name[0]
+	         name = self.system_name[0]
             else:
 	         name = self.segid_engine_map[segid]
 	else:
 	    idx = int(segid) % self.engines_N
-	    name = self.engine_name[idx]
-	self.log("Engine name for segid %s is %s" % (str(segid), name ))
+	    name = self.system_name[idx]
+	self.log("System name for segid %s is %s" % (str(segid), name ))
 	
 	return name
 
@@ -456,16 +457,21 @@ class Root(object):
 
 	translationDict = {}
 	if translation:
-		translationDict["translatedText"] = translation
+		if (re.match("_NOSUGGESTION_", name)): translationDict["translatedText"] = " "
+		else: translationDict["translatedText"] = translation
 	if phraseAlignment:
-		translationDict["phraseAlignment"] = phraseAlignment
+		if (re.match("_NOSUGGESTION_", name)): translationDict["phraseAlignment"] = ""
+		else: translationDict["phraseAlignment"] = phraseAlignment
 	if wordAlignment:
-		translationDict["wordAlignment"] = wordAlignment
+		if (re.match("_NOSUGGESTION_", name)): translationDict["wordAlignment"] = ""
+		else: translationDict["wordAlignment"] = wordAlignment
         if self.sentence_confidence_enabled == 1:
-		if sentenceConfidence:
-                	translationDict["sentence_confidence"] = sentenceConfidence
-	translationDict["engineName"] = name
-	translationDict["segmentID"] = segid
+                self.log("sentence_confidence_enabled: passed")
+                if sentenceConfidence:
+                        if (re.match("_NOSUGGESTION_", name)): translationDict["sentence_confidence"] = ""
+                        else: translationDict["sentence_confidence"] = sentenceConfidence
+        translationDict["systemName"] = name
+        translationDict["segmentID"] = segid
 
 	answerDict = {}
         answerDict["translations"] = [translationDict]
@@ -507,7 +513,7 @@ class Root(object):
         answerDict = {}
         answerDict["code"] = "0"
         answerDict["string"] = "OK, but this server does not manage user feedback"
-        answerDict["engineName"] = key
+        answerDict["systemName"] = key
         answerDict["segmentID"] = segid
 
         data = {"data" : answerDict}
@@ -534,7 +540,7 @@ class Root(object):
         answerDict = {}
         answerDict["code"] = "0"
         answerDict["string"] = "OK, but this server does not manage user feedback"
-        answerDict["engineName"] = key
+        answerDict["systemName"] = key
         answerDict["segmentID"] = segid
 
         data = {"data" : answerDict}
@@ -556,10 +562,6 @@ if __name__ == "__main__":
     parser.add_argument('-moses1', dest="moses1_path", action='store', help='path to an other moses executable', default="")
     parser.add_argument('-moses2', dest="moses2_path", action='store', help='path to an other moses executable', default="")
     parser.add_argument('-moses3', dest="moses3_path", action='store', help='path to an other moses executable', default="")
-    parser.add_argument('-moses-name', dest="moses_name", action='store', help='name of the moses engine', default="")
-    parser.add_argument('-moses1-name', dest="moses1_name", action='store', help='name of the additional engine', default="")
-    parser.add_argument('-moses2-name', dest="moses2_name", action='store', help='name of the additional engine', default="")
-    parser.add_argument('-moses3-name', dest="moses3_name", action='store', help='name of the additional engine', default="")
     parser.add_argument('-options', dest="moses_options", action='store', help='moses options, including .ini -async-output -print-id', default="-f phrase-model/moses.ini -v 0 -threads 2 -async-output -print-id")
     parser.add_argument('-options1', dest="moses1_options", action='store', help='options for the additional moses engine, including .ini -async-output -print-id', default="")
     parser.add_argument('-options2', dest="moses2_options", action='store', help='options for the additional moses engine, including .ini -async-output -print-id', default="")
@@ -575,9 +577,11 @@ if __name__ == "__main__":
     parser.add_argument('-timeout', help='timeout for call to translation engine, default: unlimited', type=int)
     parser.add_argument('-verbose', help='verbosity level, default: 0', type=int, default=0)
 
-    #configuration file for the updater
-    parser.add_argument('-updater', dest="updater_config", action='store', help='path to the configuration file of the updater', default="XXXXXXXXX")
-    
+    parser.add_argument('-system-name', dest="system_name", action='store', help='name for the engine', default="")
+    parser.add_argument('-system1-name', dest="system1_name", action='store', help='name forthe additional engine', default="")
+    parser.add_argument('-system2-name', dest="system2_name", action='store', help='name of the additional engine', default="")
+    parser.add_argument('-system3-name', dest="system3_name", action='store', help='name of the additional engine', default="")
+
     #file for mapping serfver ID to specific engine
     parser.add_argument('-segment2system', dest="segment2system", action='store', help='path to the file containing the map from segment IDs to engine names', default="")
 
@@ -593,32 +597,32 @@ if __name__ == "__main__":
         init_log("%s.trans.log" %args.logprefix)
 
     moses = {}
-    if args.moses_name:
-	name = args.moses_name
+    if args.system_name:
+	name = args.system_name
     else:
-	name = "Engine_0"
+	name = "System_0"
     moses[name] = MosesProc(" ".join((args.moses_path, args.moses_options)),name)
     if args.moses1_path != "":
-        if args.moses1_name:
-            name = args.moses1_name
+        if args.system1_name:
+            name = args.system1_name
         else:
-            name = "Engine_1"
+            name = "System_1"
         moses[name] = MosesProc(" ".join((args.moses1_path, args.moses1_options)),name)
     if args.moses2_path != "":
-        if args.moses2_name:
-            name = args.moses2_name
+        if args.system2_name:
+            name = args.system2_name
         else:
-            name = "Engine_2"
+            name = "System_2"
         moses[name] = MosesProc(" ".join((args.moses2_path, args.moses2_options)),name)
     if args.moses3_path != "":
-        if args.moses3_name:
-            name = args.moses3_name
+        if args.system3_name:
+            name = args.system3_name
         else:
-            name = "Engine_3"
+            name = "System_3"
         moses[name] = MosesProc(" ".join((args.moses3_path, args.moses3_options)),name)
 
     for k in sorted(moses.keys()):
-        sys.stderr.write("k:|%s|\n" %repr(k))
+        sys.stderr.write("Active System:|%s|\n" %repr(k))
 
     cherrypy.config.update({'server.request_queue_size' : 1000,
                             'server.socket_port': args.port,
@@ -629,7 +633,7 @@ if __name__ == "__main__":
     if args.logprefix:
         cherrypy.config.update({'log.access_file': "%s.access.log" %args.logprefix,
                                 'log.error_file': "%s.error.log" %args.logprefix})
-    cherrypy.quickstart(Root(moses, updater_config = args.updater_config,
+    cherrypy.quickstart(Root(moses, 
                              prepro_cmd = args.prepro, postpro_cmd = args.postpro,
                              sentence_confidence_cmd = args.sentence_confidence,
                              slang = args.slang, tlang = args.tlang,

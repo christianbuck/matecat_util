@@ -110,13 +110,13 @@ class ReadThread(threading.Thread):
 
             found = False
             self.log("looking for id %s in %s result queues" %(line[0], len(result_queues)))
-            self.log("the rest of the line is :|%s|" %(line[1]))
+            ###self.log("the rest of the line is :|%s|" %(line[1]))
             for idx, (i, name, q) in enumerate(result_queues):
                 if i == int(line[0]):
                     if len(line) > 1:
-                        q.put(name, line[1])
+                        q.put( (name, line[1]) )
                     else:
-                        q.put(name, "")
+                        q.put( (name, "") )
                     result_queues.pop(idx)
                     found = True
                     break
@@ -215,8 +215,10 @@ class Root(object):
         self.log("_get_engine_key self.engines_N:|%d|" % self.engines_N)
 
         self.queue_translate = {}
-        for k in moses.keys():
+        self.system_name = []
+        for k in sorted(moses.keys()):
             self.queue_translate[k] = moses[k].source_queue
+            self.system_name.append(k)
 
         self.updater = {}
         for k in updater_config.keys():
@@ -277,7 +279,7 @@ class Root(object):
 
         map = open(file, 'r')
 #format of each line
-#segment_id engine_name updater_name
+#segment_id system_name
 
         self.segid_engine_map = {}
         self.segid_updater_map = {}
@@ -285,19 +287,19 @@ class Root(object):
         while line:
             entries = line.split()
             self.segid_engine_map[str(int(entries[0]))] = entries[1]
-            self.segid_updater_map[str(int(entries[0]))] = entries[2]
+            self.segid_updater_map[str(int(entries[0]))] = entries[1]
             line = map.readline().strip()       
 
     def _get_engine_key(self, segid):
         if self.segid_engine_map != None:
             if not segid in self.segid_engine_map:
                  self.log("Segment id is not present in the map. Use the first available engine")
-                 name = self.engine_name[0]
+                 name = self.system_name[0]
             else:
                  name = self.segid_engine_map[segid]
         else:
             idx = int(segid) % self.engines_N
-            name = self.engine_name[idx]
+            name = self.system_name[idx]
         self.log("Engine name for segid %s is %s" % (str(segid), name ))
 
         return name
@@ -535,16 +537,20 @@ class Root(object):
 
 	translationDict = {}
 	if translation:
-		translationDict["translatedText"] = translation
+		if (re.match("_NOSUGGESTION_", name)): translationDict["translatedText"] = " "
+		else: translationDict["translatedText"] = translation
 	if phraseAlignment:
-		translationDict["phraseAlignment"] = phraseAlignment
+		if (re.match("_NOSUGGESTION_", name)): translationDict["phraseAlignment"] = ""
+		else: translationDict["phraseAlignment"] = phraseAlignment
 	if wordAlignment:
-		translationDict["wordAlignment"] = wordAlignment
+		if (re.match("_NOSUGGESTION_", name)): translationDict["wordAlignment"] = ""
+		else: translationDict["wordAlignment"] = wordAlignment
         if self.sentence_confidence_enabled == 1:
                 self.log("sentence_confidence_enabled: passed")
                 if sentenceConfidence:
-                        translationDict["sentence_confidence"] = sentenceConfidence
-        translationDict["engineName"] = name
+                        if (re.match("_NOSUGGESTION_", name)): translationDict["sentence_confidence"] = ""
+			else: translationDict["sentence_confidence"] = sentenceConfidence
+        translationDict["systemName"] = name
         translationDict["segmentID"] = segid
 
         answerDict = {}
@@ -577,11 +583,11 @@ class Root(object):
         self.log("The server is working on segid: %s" %repr(segid))
 
 	key = self._get_updater_key(segid)
-        if updater_config[key] == None:
+        if self.updater[key] == None:
 	        answerDict = {}
         	answerDict["code"] = "0"
        		answerDict["string"] = "OK, but this engine/updater combination does not manage user feedback"
-                answerDict["engineName"] = key
+                answerDict["systemName"] = key
                 answerDict["segmentID"] = segid
 
         	data = {"data" : answerDict}
@@ -630,7 +636,7 @@ class Root(object):
         answerDict = {}
         answerDict["code"] = "0"
         answerDict["string"] = "OK"
-        answerDict["engineName"] = name
+        answerDict["systemName"] = name
         answerDict["segmentID"] = segid
 
         data = {"data" : answerDict}
@@ -661,7 +667,7 @@ class Root(object):
                 answerDict = {}
                 answerDict["code"] = "0"
                 answerDict["string"] = "OK, but this engine/updater combination does not manage this request"
-                answerDict["engineName"] = k
+                answerDict["systemName"] = k
                 answerDict["segmentID"] = segid
 
                 data = {"data" : answerDict}
@@ -712,10 +718,6 @@ if __name__ == "__main__":
     parser.add_argument('-moses1', dest="moses1_path", action='store', help='path to an other moses executable', default="")
     parser.add_argument('-moses2', dest="moses2_path", action='store', help='path to an other moses executable', default="")
     parser.add_argument('-moses3', dest="moses3_path", action='store', help='path to an other moses executable', default="")
-    parser.add_argument('-moses-name', dest="moses_name", action='store', help='name of the moses engine', default="")
-    parser.add_argument('-moses1-name', dest="moses1_name", action='store', help='name of the additional engine', default="")
-    parser.add_argument('-moses2-name', dest="moses2_name", action='store', help='name of the additional engine', default="")
-    parser.add_argument('-moses3-name', dest="moses3_name", action='store', help='name of the additional engine', default="")
     parser.add_argument('-options', dest="moses_options", action='store', help='moses options, including .ini -async-output -print-id', default="-f phrase-model/moses.ini -v 0 -threads 2 -async-output -print-id")
     parser.add_argument('-options1', dest="moses1_options", action='store', help='options for the additional moses engine, including .ini -async-output -print-id', default="")
     parser.add_argument('-options2', dest="moses2_options", action='store', help='options for the additional moses engine, including .ini -async-output -print-id', default="")
@@ -738,10 +740,12 @@ if __name__ == "__main__":
     parser.add_argument('-updater1', dest="updater1_config", action='store', help='path to the configuration file of the additional updater', default="")
     parser.add_argument('-updater2', dest="updater2_config", action='store', help='path to the configuration file of the additional updater', default="")
     parser.add_argument('-updater3', dest="updater3_config", action='store', help='path to the configuration file of the additional updater', default="")
-    parser.add_argument('-updater-name', dest="moses_name", action='store', help='name of the updater', default="")
-    parser.add_argument('-updater1-name', dest="updater1_name", action='store', help='name of the additional updater', default="")
-    parser.add_argument('-updater2-name', dest="updater2_name", action='store', help='name of the additional updater', default="")
-    parser.add_argument('-updater3-name', dest="updater3_name", action='store', help='name of the additional updater', default="")
+
+    #names for the combination of engines and updaters, required if a map is provided
+    parser.add_argument('-system-name', dest="system_name", action='store', help='name for the combination of engine and updater', default="")
+    parser.add_argument('-system1-name', dest="system1_name", action='store', help='name forthe additional combination of engine and updater', default="")
+    parser.add_argument('-system2-name', dest="system2_name", action='store', help='name of the additional combination of engine and updater', default="")
+    parser.add_argument('-system3-name', dest="system3_name", action='store', help='name of the additional combination of engine and updater', default="")
 
     #file for mapping serfver ID to specific engine and updater
     parser.add_argument('-segment2system', dest="segment2system", action='store', help='path to the file containing the map from segment IDs to engine and updater names', default="")
@@ -758,89 +762,38 @@ if __name__ == "__main__":
         init_log("%s.trans.log" %args.logprefix)
 
     moses = {}
-    if args.moses_name:
-        name = args.moses_name
-    else:
-        name = "Engine_0"
-    moses[name] = MosesProc(" ".join((args.moses_path, args.moses_options)),name)
-    if args.moses1_path != "":
-        if args.moses1_name:
-            name = args.moses1_name
-        else:
-            name = "Engine_1"
-        moses[name] = MosesProc(" ".join((args.moses1_path, args.moses1_options)),name)
-    if args.moses2_path != "":
-        if args.moses2_name:
-            name = args.moses2_name
-        else:
-            name = "Engine_2"
-        moses[name] = MosesProc(" ".join((args.moses2_path, args.moses2_options)),name)
-    if args.moses3_path != "":
-        if args.moses3_name:
-            name = args.moses3_name
-        else:
-            name = "Engine_3"
-        moses[name] = MosesProc(" ".join((args.moses3_path, args.moses3_options)),name)
-
-    for k in moses.keys():
-        sys.stderr.write("k:|%s|\n" %repr(k))
-
-
-
-   updater_config = {}
-    if args.moses_name:
-        name = args.moses_name
-    else:
-        name = "Engine_0"
-    moses[name] = MosesProc(" ".join((args.moses_path, args.moses_options)),name)
-    if args.moses1_path != "":
-        if args.moses1_name:
-            name = args.moses1_name
-        else:
-            name = "Engine_1"
-        moses[name] = MosesProc(" ".join((args.moses1_path, args.moses1_options)),name)
-    if args.moses2_path != "":
-        if args.moses2_name:
-            name = args.moses2_name
-        else:
-            name = "Engine_2"
-        moses[name] = MosesProc(" ".join((args.moses2_path, args.moses2_options)),name)
-    if args.moses3_path != "":
-        if args.moses3_name:
-            name = args.moses3_name
-        else:
-            name = "Engine_3"
-        moses[name] = MosesProc(" ".join((args.moses3_path, args.moses3_options)),name)
-
-
     updater_config = {}
-    if args.updater_name:
-        name = args.updater_name 
+    if args.system_name:
+        name = args.system_name
     else:
-        name = "Updater_0"
+        name = "System_0"
+    moses[name] = MosesProc(" ".join((args.moses_path, args.moses_options)),name)
     updater_config[name] = args.updater_config 
-    if args.updater1_config != "":
-        if args.updater1_name:
-            name = args.updater1_name
+    if args.moses1_path != "" and args.updater1_config != "" :
+        if args.system1_name:
+            name = args.system1_name
         else:
-            name = "Updater_1"
+            name = "System_1"
+        moses[name] = MosesProc(" ".join((args.moses1_path, args.moses1_options)),name)
         updater_config[name] = args.updater1_config 
-    if args.updater2_config != "":
-        if args.updater2_name:
-            name = args.updater2_name
+    if args.moses2_path != "" and args.updater2_config != "" :
+        if args.system2_name:
+            name = args.system2_name
         else:
-            name = "Updater_2"
-        updater_config[name] = args.updater2_config           
+            name = "System_2"
+        moses[name] = MosesProc(" ".join((args.moses2_path, args.moses2_options)),name)
+        updater_config[name] = args.updater2_config 
+    if args.moses3_path != "" and args.updater2_config != "" :
+        if args.system3_name:
+            name = args.system3_name
+        else:
+            name = "System_3"
+        moses[name] = MosesProc(" ".join((args.moses3_path, args.moses3_options)),name)
+        updater_config[name] = args.updater3_config 
 
-    if args.updater3_config != "":
-        if args.updater3_name:
-            name = args.updater3_name
-        else:
-            name = "Updater_3"
-        updater_config[name] = args.updater3_config           
 
     for k in updater_config.keys():
-        sys.stderr.write("k:|%s|\n" %repr(k))
+        sys.stderr.write("Active System:|%s|\n" %repr(k))
 
     assert (len(moses) == len(updater_config)), "number of engines and updaters does not match"
 
