@@ -145,7 +145,7 @@ class Extractor_Constrained_Search:
 
 	def filter_phrases(self, phrases):
 		"""
-	        Remove phrases that only consist of stopwords or punctuation (garbage collectors).
+	        Remove phrases that only consist of words shorter than 3 characters
 	        """
 	        filtered = []
 	        for p in phrases:
