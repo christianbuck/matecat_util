@@ -12,7 +12,7 @@ matecatdir=/path/to/main/MATECAT/dir
 softwaredir=$matecatdir/code/software
 python=/path/to/python-2.7.2
 
-server=$softwaredir/SERVER/server_static_multiengine.py
+server=$softwaredir/SERVER/server_static.py
 
 mosesdir=/path/to/moses/dir
 # ex:
@@ -34,8 +34,9 @@ moses_config=${MODELS}/moses-static.ini
 moses1_config=${MODELS}/moses-static.ini
 moses2_config=${MODELS}/moses-static.ini
 
-moses_name="MOSES"
-moses1_name="MOSES1"
+#System names
+system_name="SYSTEM"
+system1_name="SYSTEM1"
 moses2_name="MOSES2"
 
 #path of the file containing the map from segment ID to engine names
@@ -58,10 +59,10 @@ fixedmosesoptions="$fixedmosesoptions -xml-input inclusive"
 exe="$python $server -ip $ip -port $port -slang $src -tlang $trg -nthreads $serverThreads"
 
 #added parameters for (up to four different) Moses engines
-exe="$exe -moses $mosescmd -options \"${fixedmosesoptions} -f $moses_config \" -moses-name $moses_name"
-if [ $moses1_config != "" ] ; then exe="$exe -moses1 $mosescmd -options1 \"${fixedmosesoptions} -f $moses1_config\" -moses1-name $moses1_name" ; fi
-if [ $moses2_config != "" ] ; then exe="$exe -moses2 $mosescmd -options2 \"${fixedmosesoptions} -f $moses2_config\" -moses2-name $moses2_name" ; fi
-if [ $moses3_config != "" ] ; then exe="$exe -moses3 $mosescmd -options3 \"${fixedmosesoptions} -f $moses3_config\" -moses3-name $moses3_name" ; fi
+exe="$exe -moses $mosescmd -options \"${fixedmosesoptions} -f $moses_config \" -system-name $system-_name"
+if [ $moses1_config != "" ] ; then exe="$exe -moses1 $mosescmd -options1 \"${fixedmosesoptions} -f $moses1_config\" -system1-name $system1_name" ; fi
+if [ $moses2_config != "" ] ; then exe="$exe -moses2 $mosescmd -options2 \"${fixedmosesoptions} -f $moses2_config\" -system2-name $system2_name" ; fi
+if [ $moses3_config != "" ] ; then exe="$exe -moses3 $mosescmd -options3 \"${fixedmosesoptions} -f $moses3_config\" -system3-name $system3_name" ; fi
 
 if [ $segment2system != "" ] ; then exe="$exe -segment2system=$segment2system"; fi
 
