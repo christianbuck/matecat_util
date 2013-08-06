@@ -14,16 +14,22 @@ def usage():
 	"""
 	Prints script usage.
 	"""
-	sys.stderr.write("./wrapper.py <config.cfg>\n")
+	sys.stderr.write("./wrapper.py <config.cfg> [-show-weights]\n")
 
 if __name__ == "__main__":
-	if not len(sys.argv) == 2:
+	if not len(sys.argv) >= 2:
 		usage()
 		sys.exit()
 	else:
 		# parse config file
 		parser = SafeConfigParser()
 		parser.read(sys.argv[1])
+
+        showweightsflag = ""
+        if len(sys.argv) == 3 and sys.argv[2] == "-show-weights":
+		sys.stderr.write("sys.argv[2]: |%s|\n" % repr(sys.argv[2]))
+                showweightsflag = "-show-weights"
+        parser.set('decoder','showweightsflag',showweightsflag)
 
 	decoder_type = parser.get('tools', 'decoder_type')
 	aligner_type = parser.get('tools', 'aligner_type')
@@ -36,6 +42,17 @@ if __name__ == "__main__":
 
 	if decoder_type == "Moses" :
         	Decoder_object = Decoder_Moses(parser)
+                if not showweightsflag == "":
+                        decoder_out, decoder_err = Decoder_object.show_weights()
+                        logging.info("DECODER_OUT: "+decoder_out)
+                        logging.info("DECODER_ERR: "+decoder_err)
+
+                        # write iweights to stdout
+                        sys.stdout.write(''.join(decoder_out))
+                        sys.stdout.flush()
+
+                        sys.exit(1)
+
 	elif decoder_type == "Moses_nbest" :
         	Decoder_object = Decoder_Moses_nbest(parser)
 	elif decoder_type == "Deterministic" :

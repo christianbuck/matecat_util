@@ -127,10 +127,10 @@ class Aligner_onlineGIZA:
 		self.err_signal_pattern = re.compile("^Alignment took [0-9]+ seconds")
 
 		#self.FNULL = open(os.devnull, 'w')
-		#self.log_s2t = open("LLL_s2t", 'w')
-		self.log_s2t = open(os.devnull, 'w')
-		#self.log_t2s = open("LLL_t2s", 'w')
-		self.log_t2s = open(os.devnull, 'w')
+		self.log_s2t = open("LLL_s2t", 'w')
+		#self.log_s2t = open(os.devnull, 'w')
+		self.log_t2s = open("LLL_t2s", 'w')
+		#self.log_t2s = open(os.devnull, 'w')
                 logging.info("MGIZA_CALL:|"+self.mgiza+' '+self.parameters_s2t+"|")
                 self.aligner_s2t = subprocess.Popen([self.mgiza]+self.parameters_s2t.split(),
                         stdin=subprocess.PIPE,
@@ -149,9 +149,10 @@ class Aligner_onlineGIZA:
  
         def align(self, source="", target="", correction="", moses_translation_options=""):
 		err = []
-                logging.info("SEARCHER source:"+source)
-                logging.info("SEARCHER correction:"+correction)
-                # write target and source to a proper string 
+                logging.info("ALIGNER source:"+source)
+                logging.info("ALIGNER correction:"+correction)
+
+# write target and source to a proper string 
                 aligner_input_src2trg = "<src>" + correction + "</src><trg>" + source + "</trg>"
                 aligner_input_trg2src = "<src>" + source + "</src><trg>" + correction + "</trg>"
 		aligner_input_src2trg = aligner_input_src2trg.lower()
@@ -160,25 +161,33 @@ class Aligner_onlineGIZA:
 
 #Source-Target          
                 logging.info("ALIGNER input s2t:"+aligner_input_src2trg)
-                logging.info("ALIGNER input t2s:"+aligner_input_trg2src)
                 self.aligner_s2t.stdin.write(aligner_input_src2trg+'\n')
-                self.aligner_s2t.stdout.flush()
+                self.aligner_s2t.stdin.flush()
+#                self.aligner_s2t.stdout.flush()
 
                 response_src2trg = self.aligner_s2t.stdout.readline().strip() + '\n'
+                logging.info("ALIGNER output s2t:"+response_src2trg)
                 response_src2trg = response_src2trg + self.aligner_s2t.stdout.readline().strip() + '\n'
+                logging.info("ALIGNER output s2t:"+response_src2trg)
                 response_src2trg = response_src2trg + self.aligner_s2t.stdout.readline().strip() + '\n'
+                logging.info("ALIGNER output s2t:"+response_src2trg)
 
                 align_src2trg_file = self.tmpdir+"/_s2t"+str(os.getpid())+"_"+rr
                 write_to_file(align_src2trg_file, response_src2trg)
 
                 logging.info("ALIGNER output s2t:"+response_src2trg)
 #Target-Source          
+                logging.info("ALIGNER input t2s:"+aligner_input_trg2src)
                 self.aligner_t2s.stdin.write(aligner_input_trg2src+'\n')
-                self.aligner_t2s.stdout.flush()
+                self.aligner_t2s.stdin.flush()
+#                self.aligner_t2s.stdout.flush()
 
                 response_trg2src = self.aligner_t2s.stdout.readline().strip() + '\n'
+                logging.info("ALIGNER output t2s:"+response_trg2src)
                 response_trg2src = response_trg2src + self.aligner_t2s.stdout.readline().strip() + '\n'
+                logging.info("ALIGNER output t2s:"+response_trg2src)
                 response_trg2src = response_trg2src + self.aligner_t2s.stdout.readline().strip() + '\n'
+                logging.info("ALIGNER output t2s:"+response_trg2src)
 
                 align_trg2src_file = self.tmpdir+"/_t2s"+str(os.getpid())+"_"+rr
                 write_to_file(align_trg2src_file, response_trg2src)
