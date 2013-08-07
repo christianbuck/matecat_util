@@ -38,14 +38,11 @@ if __name__ == "__main__":
 
 	input = open(parser.get('data', 'source'), 'r')
 	edit = open(parser.get('data', 'reference'), 'r')
-        NBESTSIZE=200
 
 	if decoder_type == "Moses" :
         	Decoder_object = Decoder_Moses(parser)
                 if not showweightsflag == "":
                         decoder_out, decoder_err = Decoder_object.show_weights()
-                        logging.info("DECODER_OUT: "+decoder_out)
-                        logging.info("DECODER_ERR: "+decoder_err)
 
                         # write iweights to stdout
                         sys.stdout.write(''.join(decoder_out))
@@ -54,7 +51,48 @@ if __name__ == "__main__":
                         sys.exit(1)
 
 	elif decoder_type == "Moses_nbest" :
+		decoder_nbestfile = ''
+		decoder_nbestsize = '100'
+		decoder_nbestdistinct = ''
+		decoder_options = ''
+                try:
+			decoder_options = self.parser.get('decoder', 'options')
+                except:
+			pass
+
+		try:
+			decoder_nbestfile = parser.get('decoder', 'nbestfile')
+			if decoder_nbestfile == "-":
+				decoder_nbestfile = "/dev/stdout"
+			decoder_options = decoder_options + " " + "-n-best-list -"	
+                except:
+			pass
+
+                try:
+			decoder_nbestsize = parser.get('decoder', 'nbestsize')
+			decoder_options = decoder_options + " " + decoder_nbestsize
+                except:
+			pass
+
+                try:
+			decoder_nbestdistinct = parser.get('decoder', 'nbestdistinct')
+			decoder_options = decoder_options + " " + decoder_nbestdistinct
+                except:
+			pass
+
+                parser.set('decoder', 'options', decoder_options) 
+		decoder_nbestout = open(decoder_nbestfile, 'w')
+
         	Decoder_object = Decoder_Moses_nbest(parser)
+                if not showweightsflag == "":
+                        decoder_out, decoder_err = Decoder_object.show_weights()
+
+                        # write weights to stdout
+                        sys.stdout.write(''.join(decoder_out))
+                        sys.stdout.flush()
+
+                        sys.exit(1)
+
 	elif decoder_type == "Deterministic" :
 	        Decoder_object = Decoder_Deterministic(parser)
 	else:
@@ -118,10 +156,21 @@ if __name__ == "__main__":
         	elif decoder_type == "Moses_nbest" :
                 	decoder_nbest, decoder_err = Decoder_object.communicate(annotated_source)
 
-	                # write translation to stdout
-	                sys.stdout.write('\n'.join(decoder_nbest)+'\n')
-	                sys.stdout.flush()
-
+			if decoder_nbestfile == "":
+	                # write nbest translations to stdout
+	                	sys.stdout.write('\n'.join(decoder_nbest)+'\n')
+	                	sys.stdout.flush()
+			else:
+	                # write nbest translations to file and first best to stdout
+	                	decoder_nbestout.write('\n'.join(decoder_nbest)+'\n')
+	                	decoder_nbestout.flush()
+				firstbest = decoder_nbest[0]
+				firstbest = re.sub(r"^[^\|]+\|\|\|\s*","",firstbest)
+				firstbest = re.sub(r"\s*\|\|\|.+$","",firstbest)
+        	        	logging.info("DECODER_1BEST: "+firstbest)
+	                	sys.stdout.write(firstbest+'\n')
+	                	sys.stdout.flush()
+			
 		# now the reference is available
 		correction = edit.readline().strip()
 		logging.info("SOURCE: "+source)

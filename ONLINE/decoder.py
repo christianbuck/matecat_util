@@ -134,8 +134,6 @@ class Decoder_Moses:
                 while True:
                         line = self.decoder.stdout.readline().strip()
                         out += line + "\n"
-#                       logging.info("Decoder_Moses line:|"+line+"|")
-#                       logging.info("Decoder_Moses out:|"+out+"|")
                         if self.showweights_signal_pattern.search(line):
                                 break   
                         self.log_t2s = open(os.devnull, 'w')
@@ -208,6 +206,7 @@ class Decoder_Moses_nbest:
                         decoder_options = decoder_options + " "
 
                 decoder_options = decoder_options + default_decoder_options
+                decoder_options = decoder_options + " " + self.parser.get('decoder', 'showweightsflag')
                 decoder_options_list = decoder_options.split(' ')
 
                 logging.info("MAIN decoder_options:|"+decoder_options+"|")
@@ -225,10 +224,15 @@ class Decoder_Moses_nbest:
 
                 logging.info("DECODER_CALL:|"+self.path+' '+" ".join(self.decoder_args_list)+"|")
 
+                if not self.parser.get('decoder', 'showweightsflag') == "":
+                        self.log_decoder = open(os.devnull, 'w')
+                else:
+                        self.log_decoder = subprocess.STDOUT
+
                 self.decoder = subprocess.Popen([self.path]+self.decoder_args_list,
                         stdin=subprocess.PIPE,
                         stdout=subprocess.PIPE,
-                        stderr=subprocess.STDOUT,
+                        stderr=self.log_decoder,
                         shell=False)
 
 #pattern to match in order to know that all output related to one sentence has been produced
@@ -237,6 +241,22 @@ class Decoder_Moses_nbest:
 
 #pattern to match in order to know that the output related to one sentence starts
                 self.in_signal_pattern = re.compile("Translating line [0-9]+")
+
+#pattern to match in order to know that the output of the show-weights has been produced
+                self.showweights_signal_pattern = re.compile("^$")
+
+        def show_weights(self):
+                out = ""
+                err = []
+                self.log_t2s = open(os.devnull, 'w')
+                while True:
+                        line = self.decoder.stdout.readline().strip()
+                        out += line + "\n"
+                        if self.showweights_signal_pattern.search(line):
+                                break
+                        self.log_t2s = open(os.devnull, 'w')
+                out = re.sub(r"\n+","\n",out)
+                return out,"".join(err)
 
         def communicate(self, in_line):
                 """
