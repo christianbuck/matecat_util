@@ -1,4 +1,4 @@
-#!usr/bin/python
+#!/usr/bin/python
 # -*- coding: utf-8 -*-
 
 import sys, logging, os
@@ -80,16 +80,22 @@ class Decoder_Moses:
 	                self.parser.get('decoder', 'options')
 	        except:
 	                self.parser.set('decoder', 'options', '')
-	        try:
-	                self.parser.get('decoder', 'verbosity')
-	        except:
-	                self.parser.set('decoder', 'verbosity', '1')
+                try:
+                        verbosity = self.parser.get('decoder', 'verbosity')
+                        logging.info("Forcing Moses verbosity to 1")
+                        if int(verbosity) < 1:
+                                self.parser.set('decoder', 'verbosity', '1')
+                except:
+                        logging.info("Setting Moses verbosity to 1")
+                        self.parser.set('decoder', 'verbosity', '1')
 
 	        decoder_options = self.parser.get('decoder', 'options')
 	        if decoder_options:
 	                decoder_options = decoder_options + " "
 	        decoder_options = decoder_options + default_decoder_options
                 decoder_options = decoder_options + " " + self.parser.get('decoder', 'showweightsflag')
+                decoder_options = re.sub(r"^\s+",'',decoder_options)
+                decoder_options = re.sub(r"\s+$",'',decoder_options)
 	        decoder_options_list = decoder_options.split(' ')
 
 	        logging.info("MAIN decoder_options:|"+decoder_options+"|")
@@ -163,10 +169,6 @@ class Decoder_Moses:
 				out = re.sub ("\s+[[01]*\]\s+\[total=[-.0-9]+\].+$", '', out)
 				out = re.sub ("(\|UNK)+",'',out)
 
-#this works with the following (see __init__
-#               self.out_signal_pattern = re.compile("Line [0-9]+: Search took [0-9\.]+ seconds")
-#				out = self.decoder.stdout.readline().strip()
-
 				break
 			else:
 				if not "cblm::Evaluate:" in line:
@@ -187,26 +189,28 @@ class Decoder_Moses_nbest:
                 self.parser = parser
 
                 # set default parameters (if needed)
-
-                # set default parameters (if needed)
                 default_decoder_options = "-xml-input inclusive"
                 default_decoder_options = default_decoder_options + " -use-persistent-cache false"
-                default_decoder_options = default_decoder_options + " -print-translation-option true"
                 try:
                         self.parser.get('decoder', 'options')
                 except:
                         self.parser.set('decoder', 'options', '')
                 try:
-                        self.parser.get('decoder', 'verbosity')
+                        verbosity = self.parser.get('decoder', 'verbosity')
+                	logging.info("Forcing Moses verbosity to 1")
+                        if int(verbosity) < 1:
+				self.parser.set('decoder', 'verbosity', '1')
                 except:
+                	logging.info("Setting Moses verbosity to 1")
                         self.parser.set('decoder', 'verbosity', '1')
 
                 decoder_options = self.parser.get('decoder', 'options')
                 if decoder_options:
                         decoder_options = decoder_options + " "
-
                 decoder_options = decoder_options + default_decoder_options
                 decoder_options = decoder_options + " " + self.parser.get('decoder', 'showweightsflag')
+                decoder_options = re.sub(r"^\s+",'',decoder_options)
+                decoder_options = re.sub(r"\s+$",'',decoder_options)
                 decoder_options_list = decoder_options.split(' ')
 
                 logging.info("MAIN decoder_options:|"+decoder_options+"|")
@@ -236,7 +240,6 @@ class Decoder_Moses_nbest:
                         shell=False)
 
 #pattern to match in order to know that all output related to one sentence has been produced
-#               self.out_signal_pattern = re.compile("^BEST TRANSLATION:\s*")
                 self.out_signal_pattern = re.compile("Line [0-9]+: Translation took [0-9\.]+ seconds total")
 
 #pattern to match in order to know that the output related to one sentence starts

@@ -1,3 +1,4 @@
+#!/usr/bin/python
 
 import sys, logging, os
 import codecs, subprocess, select, re, logging
@@ -39,32 +40,36 @@ if __name__ == "__main__":
 	input = open(parser.get('data', 'source'), 'r')
 	edit = open(parser.get('data', 'reference'), 'r')
 
+	decoder_options = ''
+	try:
+        	decoder_options = self.parser.get('decoder', 'options')
+        except:
+        	pass
+
+        if aligner_type == "Constrained_Search" :
+		decoder_options = decoder_options + " -print-translation-option true"
+        parser.set('decoder', 'options', decoder_options) 
+
 	if decoder_type == "Moses" :
         	Decoder_object = Decoder_Moses(parser)
                 if not showweightsflag == "":
                         decoder_out, decoder_err = Decoder_object.show_weights()
 
-                        # write iweights to stdout
+                        # write weights to stdout
                         sys.stdout.write(''.join(decoder_out))
                         sys.stdout.flush()
 
                         sys.exit(1)
 
 	elif decoder_type == "Moses_nbest" :
-		decoder_nbestfile = ''
+		decoder_nbestfile = '/dev/stdout'
 		decoder_nbestsize = '100'
 		decoder_nbestdistinct = ''
-		decoder_options = ''
-                try:
-			decoder_options = self.parser.get('decoder', 'options')
-                except:
-			pass
 
 		try:
 			decoder_nbestfile = parser.get('decoder', 'nbestfile')
-			if decoder_nbestfile == "-":
-				decoder_nbestfile = "/dev/stdout"
-			decoder_options = decoder_options + " " + "-n-best-list -"	
+			if decoder_nbestfile == "-": decoder_nbestfile = '/dev/stdout'
+			decoder_options = decoder_options + " " + "-n-best-list -"
                 except:
 			pass
 
@@ -156,7 +161,8 @@ if __name__ == "__main__":
         	elif decoder_type == "Moses_nbest" :
                 	decoder_nbest, decoder_err = Decoder_object.communicate(annotated_source)
 
-			if decoder_nbestfile == "":
+        	        logging.info("DECODER_NBESTFILE: |"+decoder_nbestfile+"|")
+			if decoder_nbestfile == "/dev/stdout":
 	                # write nbest translations to stdout
 	                	sys.stdout.write('\n'.join(decoder_nbest)+'\n')
 	                	sys.stdout.flush()
