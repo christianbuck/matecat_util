@@ -214,9 +214,29 @@ class Root(object):
         return self._dump_json(data)
 
     @cherrypy.expose
-    def tokenize(self, q):
-        #q = self.filter.filter(kwargs["q"])
-        return self._process_externally(q, self.external_processors.tokenize, 'tokenizedText')
+    def tokenize(self, **kwargs):
+	source = self.filter.filter(kwargs["q"])
+	target = self.filter.filter(kwargs["t"])
+
+	# pre-processing of source and target
+        source_tmp  = self.external_processors.tokenize(source)
+        source_tmp2 = self.external_processors.truecase(source_tmp)
+        source_tok  = self.external_processors.prepro(source_tmp2)
+
+        target_tmp = self.tgt_external_processors.tokenize(target)
+        target_tmp2 = self.tgt_external_processors.truecase(target_tmp)
+        target_tok = self.tgt_external_processors.prepro(target_tmp2)
+
+        # get tokenized spans
+        tracker = tokentracker.TokenTracker()
+        tmp = tracker.tokenize(source_tok)
+        source_spans = tracker.track_detok(source_tok, source, tmp)
+        tmp = tracker.tokenize(target_tok)
+        target_spans = tracker.track_detok(target_tok, target, tmp)
+
+	align_data = {'sourceText':source, 'targetText':target, 'tokenization': { 'src': source_spans, 'tgt': target_spans } }
+        data = { "data" : align_data }
+        return self._dump_json(data)
 
     @cherrypy.expose
     def detokenize(self, **kwargs):
@@ -313,7 +333,6 @@ class Root(object):
 
         return translationDict
 
-
     @cherrypy.expose
     def translate(self, **kwargs):
         response = cherrypy.response
@@ -405,35 +424,52 @@ class Root(object):
         return self._dump_json(data)
 
     @cherrypy.expose
-    def align(self, source, target, mode):
+    def align(self, **kwargs):
+	response = cherrypy.response
+	response.headers['Content-Type'] = 'application/json'
+
         if self.symal == None:
             message = "need bidirectional aligner for updates"
             return {"error": {"code":400, "message":message}}
-        source = self.external_processors.tokenize(source)
-        source = self.external_processors.truecase(source)
-        source = self.external_processors.prepro(source)
 
-        target = self.tgt_external_processors.tokenize(target)
-        target = self.tgt_external_processors.truecase(target)
-        target = self.tgt_external_processors.prepro(target)
+	source = self.filter.filter(kwargs["q"])
+	target = self.filter.filter(kwargs["t"])
 
+	# pre-processing of source and target
+        source_tmp  = self.external_processors.tokenize(source)
+        source_tmp2 = self.external_processors.truecase(source_tmp)
+        source_tok  = self.external_processors.prepro(source_tmp2)
+
+        target_tmp = self.tgt_external_processors.tokenize(target)
+        target_tmp2 = self.tgt_external_processors.truecase(target_tmp)
+        target_tok = self.tgt_external_processors.prepro(target_tmp2)
+
+	# word alignment
+        mode = 's2t'
         if self.symal == None:
             message = "need bidirectional aligner for updates"
             return {"error": {"code":400, "message":message}}
         alignment = ''
         if mode == 's2t':
-            alignment = self.symal.align_s2t(source, target)
-            alignment = " ".join(["%s-%s" %(j,i) for j,i in alignment])
+            alignment = self.symal.align_s2t(source_tok, target_tok)
         elif mode == 't2f':
-            alignment = self.symal.align_t2s(source, target)
-            alignment = " ".join(["%s-%s" %(i,j) for i,j in alignment])
+            alignment = self.symal.align_t2s(source_tok, target_tok)
         elif mode == 'sym':
-            pass
+            alignment = self.symal.symal(source_tok, target_tok)
         else:
             message = "unknow alignment mode %s" %mode
             return {"error": {"code":400, "message":message}}
-        align_dict = {'source':source, 'target':target, 'alignment':alignment}
-        data = {"data" : {"alignment" : [align_dict]}}
+        alignment = [point for point in alignment if point[0] != -1 and point[1] != -1]
+
+        # get tokenized spans
+        tracker = tokentracker.TokenTracker()
+        tmp = tracker.tokenize(source_tok)
+        source_spans = tracker.track_detok(source_tok, source, tmp)
+        tmp = tracker.tokenize(target_tok)
+        target_spans = tracker.track_detok(target_tok, target, tmp)
+
+	align_data = {'sourceText':source, 'targetText':target, 'alignment':alignment, 'tokenization': { 'src': source_spans, 'tgt': target_spans } }
+        data = {"data" : align_data}
         return self._dump_json(data)
 
     @cherrypy.expose
