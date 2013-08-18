@@ -1,0 +1,28 @@
+# variables for Mosesserver
+MOSES_ROOT=/Users/nicolabertoldi/Work/Activities/MOSES/GitHub_repository/mosesdecoder
+MOSES_MODELS=/Users/nicolabertoldi/Work/Activities/MOSES/GitHub_repository/debugging
+MOSES_PORT=7777
+MOSES_LOG=LLL
+
+# variables for MT server
+MTSERVER_ROOT=/tmp/new_tmp/mtserver_master
+MTSERVER_URL=127.0.0.1
+MTSERVER_PORT=8888
+MTSERVER_SRCLNG=en
+MTSERVER_TGTLNG=it
+
+XMLRPC_ROOT=/Users/nicolabertoldi/Work/Activities/XMLRPC/xmlrpc-c-1.16.42
+
+export MOSES_ROOT=${MOSES_ROOT}
+export MOSES_MODELS=${MOSES_MODELS}
+export MOSES_PORT=${MOSES_PORT}
+export MOSES_LOG=${MOSES_LOG}
+
+export MTSERVER_ROOT=${MTSERVER_ROOT}
+export MTSERVER_URL=${MTSERVER_URL}
+export MTSERVER_PORT=${MTSERVER_PORT}
+export MTSERVER_SRCLNG=${MTSERVER_SRCLNG}
+export MTSERVER_TGTLNG=${MTSERVER_TGTLNG}
+
+export DYLD_LIBRARY_PATH=${XMLRPC_ROOT}/lib:${DYLD_LIBRARY_PATH}
+
