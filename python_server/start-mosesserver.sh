@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/bash
 
 mosesserver_cmd=${MOSES_ROOT}/bin/mosesserver 
 mosesserver_config=${MOSES_MODELS}/moses.ini
