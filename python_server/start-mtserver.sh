@@ -5,7 +5,7 @@ SCRIPTS=${MTSERVER_ROOT}
 server=${MTSERVER_ROOT}/python_server/server.py
 
 #parameters for the Moses server
-mosesserver_ip=127.0.0.1
+mosesserver_ip=${MOSES_URL}
 mosesserver_port=${MOSES_PORT}
 mosesurl="http://${mosesserver_ip}:${mosesserver_port}/RPC2"
 
