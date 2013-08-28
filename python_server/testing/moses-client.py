@@ -9,6 +9,7 @@ import datetime
 
 #parameters for the Moses server
 mosesserver_ip = "127.0.0.1"
+mosesserver_ip = os.environ.get('MOSES_URL')
 mosesserver_port = os.environ.get('MOSES_PORT')
 
 url = "http://" + mosesserver_ip + ":" + mosesserver_port + "/RPC2"
