@@ -1,4 +1,4 @@
-[Moses](https://github.com/moses-smt/mosesdecoder) comes with an [XMLPRC enabled server](https://github.com/moses-smt/mosesdecoder/tree/master/contrib/server) which is great for producting translations but does not handle pre- and postprocessing. To provide an interface similar to the [Google Translate API](https://developers.google.com/translate/) this 
+[Moses](https://github.com/moses-smt/mosesdecoder) comes with an [XMLPRC enabled server](https://github.com/moses-smt/mosesdecoder/tree/master/contrib/server) which is great for producting translations but does not handle pre- and postprocessing. This server calls all the scripts and wraps mosesserver to provide an interface similar to the [Google Translate API](https://developers.google.com/translate/).
 
 
 How to use:
