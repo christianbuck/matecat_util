@@ -1,0 +1,24 @@
+export TMP=/tmp
+export EDITOR=vim
+export PATH=${PATH}:.:$HOME/code/script/tools
+
+MATECAT_HOME=/path/to/matecat/dir
+export BOOST_ROOT=${MATECAT_HOME}/code/software/BOOST/boost_1_49_0
+export BOOST_ROOT2=${MATECAT_HOME}/code/software/BOOST/1_49_0
+export ZLIB_ROOT=${MATECAT_HOME}/code/software/ZLIB/zlib-1.2.6
+export BZIP2_ROOT=${MATECAT_HOME}/code/software/BZIP2/bzip2-1.0.6
+export IRSTLM_ROOT=${MATECAT_HOME}/code/software/IRSTLM/irstlm-5.80.01
+export MGIZA_ROOT=${MATECAT_HOME}/code/software/MGIZA/mgizapp-0.6.3/
+export XMLRPC_ROOT=${MATECAT_HOME}/code/software/XMLRPC/xmlrpc-c-1.16.42
+
+export LD_LIBRARY_PATH=$BOOST_ROOT/lib:${LD_LIBRARY_PATH}
+export LD_LIBRARY_PATH=$BOOST_ROOT2/lib:${LD_LIBRARY_PATH}
+export LD_LIBRARY_PATH=$ZLIB_ROOT/lib:${LD_LIBRARY_PATH}
+export LD_LIBRARY_PATH=$BZIP2_ROOT/lib:${LD_LIBRARY_PATH}
+export LD_LIBRARY_PATH=$IRSTLM_ROOT/lib:${LD_LIBRARY_PATH}
+export LD_LIBRARY_PATH=$XMLRPC_ROOT/lib:${LD_LIBRARY_PATH}
+
+export PERL5LIB=${MATECAT_HOME}/code/perl_modules/lib64/perl5/
+export PYTHONPATH=${PYTHONPATH}:${MATECAT_HOME}/code/software/PYTHON/:${MATECAT_HOME}/code/software/ONLINE/
+export TREETAGGER_HOME=${MATECAT_HOME}/code/software/TREETAGGER/tree-tagger
+
