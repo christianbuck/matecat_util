@@ -212,6 +212,7 @@ class Root(object):
         self.filter = Filter(remove_newlines=True, collapse_spaces=True)
 
         self.engines_N = len(moses.keys())
+        self.updater_N = len(moses.keys())
         self.log("_get_engine_key self.engines_N:|%d|" % self.engines_N)
 
         self.queue_translate = {}
@@ -219,9 +220,6 @@ class Root(object):
         for k in sorted(moses.keys()):
             self.queue_translate[k] = moses[k].source_queue
             self.system_name.append(k)
-
-        self.updater_N = len(updater_config.keys())
-        self.log("_get_updater_key self.updater_N:|%d|" % self.updater_N)
 
         self.updater = {}
         for k in updater_config.keys():
@@ -400,6 +398,7 @@ class Root(object):
         input = "<seg id=\""+id+"\"><src>"+source+"</src><trg>"+target+"</trg></seg>"
         output = input
         for proc in cherrypy.thread_data.sentence_confidence:
+	    self.log("sending to QE_module: %s" %output)
             output = self._pipe(proc, output)
 
         m = re_match.search(output)
@@ -423,6 +422,12 @@ class Root(object):
             cherrypy.thread_data.updater_target_prepro = map(popen, self.updater_target_prepro_cmd)
         for proc, cmd in izip(cherrypy.thread_data.updater_target_prepro, self.updater_target_prepro_cmd):
             query = self._pipe(proc, query)
+        return query
+
+    def _cleanMosesPhraseAlignment(self, query):
+        pattern = " *\|\d+\-\d+\|"
+        re_passthrough = re.compile(pattern)
+        query = re_passthrough.sub('',query)
         return query
 
     def _getOnlyTranslation(self, query):
@@ -474,7 +479,8 @@ class Root(object):
         if errors:
             cherrypy.response.status = 400
             return self._dump_json(errors)
-        self.log("The server is working on: %s" %repr(kwargs["q"]))
+        self.log("The server is working on kwargs[q]: %s" %kwargs["q"])
+        self.log("The server is working on repr(kwargs[q]): %s" %repr(kwargs["q"]))
 
         if "segid" in kwargs :
                 segid = kwargs["segid"]
@@ -505,15 +511,19 @@ class Root(object):
                 return self._timeout_error(q, 'translation')
 
         if self.verbose > 0:
-            self.log("Translation before sentence-level confidence estimation: %s" %translation)
             self.log("Source before sentence-level confidence estimation: %s" %q)
+            self.log("Translation before sentence-level confidence estimation: %s" %translation)
 
         sentenceConfidence = None
         if self.sentence_confidence_enabled == 1:
             if self.verbose > 0:
-               self.log("Translation before sentence-level confidence estimation: %s" %translation)
-               self.log("Source before sentence-level confidence estimation: %s" %q)
-            sentenceConfidence = self._get_sentence_confidence("ID", q, translation)
+               self.log("Source used for confidence estimation: %s" %q)
+               self.log("Target used for confidence estimation: %s" %translation)
+               self.log("Segment ID used for confidence estimation: %s" %segid)
+            source = self._getOnlyTranslation(q)
+            target = self._getOnlyTranslation(translation)
+            target = self._cleanMosesPhraseAlignment(target)
+            sentenceConfidence = self._get_sentence_confidence(segid, source, target)
             if self.verbose > 0:
                self.log("Sentence Confidence: %s" %sentenceConfidence)
                self.log("Translation after postprocessing: %s" %translation)
