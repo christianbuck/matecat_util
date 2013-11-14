@@ -595,11 +595,6 @@ if __name__ == "__main__":
 		usage()
 		sys.exit()
 		
-	global _stopwords_en
-	_stopwords_en = read_file("/hltsrv0/waeschle/experiments/scripts/stopwords.en")
-	global _stopwords_it
-	_stopwords_it = read_file("/hltsrv0/waeschle/experiments/scripts/stopwords.it")
-	
 	suffix = ".ann"
 	if cblm:
 		if lmfilter:

@@ -3,6 +3,7 @@
 
 import sys, getopt, logging, os, re
 import subprocess
+import random
 
 from ConfigParser import SafeConfigParser
 
@@ -202,16 +203,22 @@ class Extractor_Moses:
                 """
                 Return output and error of the decoder for the given input.
                 """
+
+                logging.info("extract_phrases: source:|"+source+"|")
+                logging.info("extract_phrases: target:|"+target+"|")
+                logging.info("extract_phrases: align:|"+giza_symmetrized_alignment+"|")
+
                 # write target, source, and alignment temporary files
-                trg_file = self.tmpdir+"/_trg"+str(os.getpid())
+                rr = str(random.randint(0,1000000))
+                trg_file = self.tmpdir+"/_trg"+str(os.getpid())+"_"+rr
                 write_to_file(trg_file, target+'\n')
-                src_file = self.tmpdir+"/_src"+str(os.getpid())
+                src_file = self.tmpdir+"/_src"+str(os.getpid())+"_"+rr
                 write_to_file(src_file, source+'\n')
-                align_file = self.tmpdir+"/_align"+str(os.getpid())
+                align_file = self.tmpdir+"/_align"+str(os.getpid())+"_"+rr
                 write_to_file(align_file, giza_symmetrized_alignment+'\n')
 
-		#prepare temporary file for storing the phrase pairs
-                PP_file = self.tmpdir+"/_PP"+str(os.getpid())
+                #prepare temporary file for storing the phrase pairs
+                PP_file = self.tmpdir+"/_PP"+str(os.getpid())+"_"+rr
 
                 # call extractor search script
                 logging.info("EXTRACTOR_CALL: "+self.extractor_script +" "+trg_file+" "+src_file+" "+align_file+" "+PP_file+" "+str(self.PPlen))

@@ -35,6 +35,11 @@ class Decoder_Deterministic:
 
 		self.source = parser.get('decoder', 'source')
 		self.target = parser.get('decoder', 'target')
+		self.verbosity = 0
+		try:
+			self.verbosity = int(parser.get('decoder', 'verbosity'))
+		except:
+			self.verbosity = 0
 
 		self.source_list = read_file(self.source)
 		self.target_list = read_file(self.target)
@@ -42,7 +47,7 @@ class Decoder_Deterministic:
 
 		i = 0
 		while i < len(self.source_list):
-	        	logging.info("INSERT:|"+self.source_list[i]+"|")
+	        	if self.verbosity > 0: logging.info("INSERT:|"+self.source_list[i]+"|")
 			if not self.source_list[i] in self.source_hash: 
 				self.source_hash[self.source_list[i]] = i
 			i += 1
@@ -55,11 +60,11 @@ class Decoder_Deterministic:
 		output = ""
 	        logging.info("Decoder_Deterministic:|"+in_line+"|")
                 if in_line in self.source_hash:
-	        	logging.info("Match:|"+in_line+"|")
+			if self.verbosity > 0: logging.info("Match:|"+in_line+"|")
 			output = self.target_list[self.source_hash[in_line]]
 		else:
-	        	logging.info("NO Match:|"+in_line+"|")
-		return output, err
+	        	if self.verbosity > 0: logging.info("NO Match:|"+in_line+"|")
+		return output, "".join(err)
 
 
 class Decoder_Moses:

@@ -20,7 +20,7 @@ def usage():
 if __name__ == "__main__":
 	if not len(sys.argv) >= 2:
 		usage()
-		sys.exit()
+		sys.exit(1)
 	else:
 		# parse config file
 		parser = SafeConfigParser()
@@ -59,7 +59,7 @@ if __name__ == "__main__":
                         sys.stdout.write(''.join(decoder_out))
                         sys.stdout.flush()
 
-                        sys.exit(1)
+                        sys.exit(0)
 
 	elif decoder_type == "Moses_nbest" :
 		decoder_nbestfile = '/dev/stdout'
@@ -96,7 +96,7 @@ if __name__ == "__main__":
                         sys.stdout.write(''.join(decoder_out))
                         sys.stdout.flush()
 
-                        sys.exit(1)
+                        sys.exit(0)
 
 	elif decoder_type == "Deterministic" :
 	        Decoder_object = Decoder_Deterministic(parser)
@@ -150,6 +150,7 @@ if __name__ == "__main__":
 		logging.info(str(s_id))
 		# talk to decoder
 		logging.info("DECODER_IN: "+annotated_source)
+                logging.info("DECODER type:|%s|" % decoder_type)
 		if decoder_type == "Moses" :
 	                decoder_out, decoder_err = Decoder_object.communicate(annotated_source)
         	        logging.info("DECODER_OUT: "+decoder_out)
@@ -176,7 +177,15 @@ if __name__ == "__main__":
         	        	logging.info("DECODER_1BEST: "+firstbest)
 	                	sys.stdout.write(firstbest+'\n')
 	                	sys.stdout.flush()
-			
+
+        	elif decoder_type == "Deterministic" :
+                        decoder_out, decoder_err = Decoder_object.communicate(source)
+                        logging.info("DECODER_OUT: "+decoder_out)
+
+                        # write translation to stdout
+                        sys.stdout.write(decoder_out+'\n')
+                        sys.stdout.flush()
+	
 		# now the reference is available
 		correction = edit.readline().strip()
 		logging.info("SOURCE: "+source)

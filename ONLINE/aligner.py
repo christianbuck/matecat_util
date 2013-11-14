@@ -128,8 +128,6 @@ class Aligner_onlineGIZA:
 
 		self.log_s2t = open(os.devnull, 'w')
 		self.log_t2s = open(os.devnull, 'w')
-		#self.log_s2t = open("_s2t.gizalog"+str(os.getpid()), 'w')
-		#self.log_t2s = open("_t2s.gizalog"+str(os.getpid()), 'w')
                 logging.info("MGIZA_CALL:|"+self.mgiza+' '+self.parameters_s2t+"|")
                 self.aligner_s2t = subprocess.Popen([self.mgiza]+self.parameters_s2t.split(),
                         stdin=subprocess.PIPE,
@@ -162,6 +160,7 @@ class Aligner_onlineGIZA:
                 logging.info("ALIGNER input s2t:"+aligner_input_src2trg)
                 self.aligner_s2t.stdin.write(aligner_input_src2trg+'\n')
                 self.aligner_s2t.stdin.flush()
+                self.aligner_s2t.stdout.flush()
 
                 response_src2trg = self.aligner_s2t.stdout.readline().strip() + '\n'
                 response_src2trg = response_src2trg + self.aligner_s2t.stdout.readline().strip() + '\n'
@@ -175,6 +174,7 @@ class Aligner_onlineGIZA:
                 logging.info("ALIGNER input t2s:"+aligner_input_trg2src)
                 self.aligner_t2s.stdin.write(aligner_input_trg2src+'\n')
                 self.aligner_t2s.stdin.flush()
+                self.aligner_t2s.stdout.flush()
 
                 response_trg2src = self.aligner_t2s.stdout.readline().strip() + '\n'
                 response_trg2src = response_trg2src + self.aligner_t2s.stdout.readline().strip() + '\n'
