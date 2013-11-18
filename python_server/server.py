@@ -233,8 +233,10 @@ class Root(object):
         source_spans = tracker.track_detok(source_tok, source, tmp)
         tmp = tracker.tokenize(target_tok)
         target_spans = tracker.track_detok(target_tok, target, tmp)
-
+ 
 	align_data = {'sourceText':source, 'targetText':target, 'tokenization': { 'src': source_spans, 'tgt': target_spans } }
+        align_data['tokenizedTarget'] = target_tmp
+        align_data['tokenizedSource'] = source_tmp
         data = { "data" : align_data }
         return self._dump_json(data)
 
