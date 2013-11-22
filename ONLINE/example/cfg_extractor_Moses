@@ -1,0 +1,5 @@
+[tools]
+extractor_type = Moses
+extractor_path = _PATH_TO_MOSES_DIR_/bin/extract
+[annotation]
+cbtm_phrase_length = 4

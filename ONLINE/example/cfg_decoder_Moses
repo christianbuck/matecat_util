@@ -1,0 +1,5 @@
+[decoder]
+path = _PATH_TO_MOSES_DIR_/bin/moses
+ini = +PATH_TO_EXAMPLE_DIR_/moses.ini
+[tools]
+decoder_type = Moses

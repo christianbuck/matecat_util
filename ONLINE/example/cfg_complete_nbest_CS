@@ -1,0 +1,32 @@
+[env]
+workdir = _PATH_TO_TMP_DIR_
+tmp = _PATH_TO_TMP_DIR_
+[data]
+source = +PATH_TO_EXAMPLE_DIR_/input.en-it.en
+reference = +PATH_TO_EXAMPLE_DIR_/input.en-it.it
+stopwords_source = +PATH_TO_EXAMPLE_DIR_/stopwords.en
+stopwords_target = +PATH_TO_EXAMPLE_DIR_/stopwords.it
+[decoder]
+path = _PATH_TO_MOSES_DIR_/bin/moses
+ini = +PATH_TO_EXAMPLE_DIR_/moses-adaptive.ini
+nbestfile = +PATH_TO_EXAMPLE_DIR_/NNN_CS
+nbestsize = 30
+[tools]
+decoder_type = Moses_nbest
+[tools]
+aligner_type = Constrained_Search
+aligner_options_extractor_path = _PATH_TO_ONLINE_DIR_/alignment_by_Constrained_Search/extract-options.pl
+aligner_constrained_search_path = _PATH_TO_ONLINE_DIR_/alignment_by_Constrained_Search/c-search-d.pl
+[tools]
+extractor_type = Constrained_Search
+[tools]
+annotator_type = onlinecache
+[annotation]
+cblm = 1
+cblm_n_gram_level = 4
+cblm_constrained_on_cbtm = 0
+cblm_improved_by_cbtm = 0
+cblm_improved_by_full_sentence = 0
+cblm_filter = 1
+cbtm = 1
+cbtm_filter = 1

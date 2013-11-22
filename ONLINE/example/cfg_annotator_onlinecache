@@ -1,0 +1,11 @@
+[tools]
+annotator_type = onlinecache
+[annotation]
+cblm = 1
+cblm_n_gram_level = 4
+cblm_constrained_on_cbtm = 0
+cblm_improved_by_cbtm = 0
+cblm_improved_by_full_sentence = 0
+cblm_filter = 1
+cbtm = 1
+cbtm_filter = 1

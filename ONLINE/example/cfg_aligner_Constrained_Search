@@ -1,0 +1,4 @@
+[tools]
+aligner_type = Constrained_Search
+aligner_options_extractor_path = _PATH_TO_ONLINE_DIR_/alignment_by_Constrained_Search/extract-options.pl
+aligner_constrained_search_path = _PATH_TO_ONLINE_DIR_/alignment_by_Constrained_Search/c-search-d.pl

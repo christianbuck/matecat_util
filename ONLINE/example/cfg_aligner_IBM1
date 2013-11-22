@@ -1,0 +1,5 @@
+[tools]
+aligner_type = IBM1
+[annotation]
+source2target_lexicon = _PATH_TO_MODELS_/lex.en-it 
+target2source_lexicon = _PATH_TO_MODELS_/lex.it-en
