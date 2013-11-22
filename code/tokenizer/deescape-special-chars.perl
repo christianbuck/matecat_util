@@ -1,6 +1,8 @@
 #!/usr/bin/perl -w
 
 use strict;
+select(STDIN);$| = 1;
+select(STDOUT);$| = 1;
 
 while(<STDIN>) {
   s/\&bar;/\|/g;   # factor separator (legacy)
