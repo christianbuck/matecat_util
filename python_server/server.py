@@ -1,4 +1,4 @@
-#!/usr/bin/python -u
+#!/usr/bin/env python
 import sys
 import threading
 import subprocess
@@ -432,7 +432,7 @@ class Root(object):
 
         if self.symal == None:
             message = "need bidirectional aligner for updates"
-            return {"error": {"code":400, "message":message}}
+            return self._dump_json ({"error": {"code":400, "message":message}})
 
 	source = self.filter.filter(kwargs["q"])
 	target = self.filter.filter(kwargs["t"])
@@ -450,7 +450,7 @@ class Root(object):
         mode = 's2t'
         if self.symal == None:
             message = "need bidirectional aligner for updates"
-            return {"error": {"code":400, "message":message}}
+            return self._dump_json ({"error": {"code":400, "message":message}})
         alignment = ''
         if mode == 's2t':
             alignment = self.symal.align_s2t(source_tok, target_tok)
@@ -460,7 +460,7 @@ class Root(object):
             alignment = self.symal.symal(source_tok, target_tok)
         else:
             message = "unknow alignment mode %s" %mode
-            return {"error": {"code":400, "message":message}}
+            return self._dump_json ({"error": {"code":400, "message":message}})
         alignment = [point for point in alignment if point[0] != -1 and point[1] != -1]
 
         # get tokenized spans
@@ -478,7 +478,7 @@ class Root(object):
     def update(self, source, target, segment, translation):
         if self.symal == None:
             message = "need bidirectional aligner for updates"
-            return {"error": {"code":400, "message":message}}
+            return self._dump_json ({"error": {"code":400, "message":message}})
 
         #source_lang = source
         #target_lang = target

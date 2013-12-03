@@ -54,6 +54,8 @@ class Levenshtein(object):
             elif ops[-1] == self.SUB or ops[-1] == self.KEEP:
                 i -= 1
                 j -= 1
+            else:
+                assert False, repr(ops[-1])
         ops.reverse()
         return ops
 
@@ -87,20 +89,24 @@ class TokenTracker(object):
         alignment = []
         for op in editops:
             if verbose:
-                print a_idx, a[a_idx], b_idx, b[b_idx], op
+                print (a_idx, a[a_idx], b_idx, b[b_idx], op)
             if op == Levenshtein.KEEP:
-                assert a[a_idx] == b[b_idx]
+                assert a[a_idx] == b[b_idx], (a_idx, a[a_idx], b_idx, b[b_idx], op)
                 alignment.append((a_idx, b_idx))
                 a_idx += 1
                 b_idx += 1
             elif op == Levenshtein.DEL: # deleted in b
                 #alignment.append((a_idx, b_idx))
                 a_idx += 1
+            elif op == Levenshtein.INS:
+                b_idx += 1
             elif op == Levenshtein.SUB:
-                assert a[a_idx] != b[b_idx]
+                assert a[a_idx] != b[b_idx], (a_idx, a[a_idx], b_idx, b[b_idx], op)
                 alignment.append((a_idx, b_idx))
                 a_idx += 1
                 b_idx += 1
+            else:
+                assert False, repr(op)
         #print alignment
         alignment = dict(alignment)
         new_spans = []
