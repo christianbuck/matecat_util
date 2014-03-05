@@ -8,9 +8,6 @@ class Levenshtein(object):
         self.s1 = s1
         self.s2 = s2
         self.Q = self._matrix()
-    #
-    #def __substitution_cost(c1, c2):
-    #    if c1 != c2 and not c1.strip()
 
     def _matrix(self):
         Q = [[None]*(len(self.s1)+1) for i in range(len(self.s2)+1)]
@@ -60,8 +57,44 @@ class Levenshtein(object):
         return ops
 
 class TokenTracker(object):
-    def tokenize(self, s, spaces=(" ")):
+    def _escape(self, s):
+        # from tokenizer.perl:
+        #$text =~ s/\&/\&amp;/g;   # escape escape
+        #$text =~ s/\|/\&#124;/g;  # factor separator
+        #$text =~ s/\</\&lt;/g;    # xml
+        #$text =~ s/\>/\&gt;/g;    # xml
+        #$text =~ s/\'/\&apos;/g;  # xml
+        #$text =~ s/\"/\&quot;/g;  # xml
+        #$text =~ s/\[/\&#91;/g;   # syntax non-terminal
+        #$text =~ s/\]/\&#93;/g;   # syntax non-terminal
+        s = s.replace('&','&amp;')
+        s = s.replace('|','&#124;')
+        s = s.replace('<','&lt;')
+        s = s.replace('>','&gt;')
+        s = s.replace('\'','&apos;')
+        s = s.replace('"','&quot;')
+        s = s.replace('[','&#91;')
+        s = s.replace(']','&#93;')
+        return s
+
+    def _unescape(self, s):
+        s = s.replace('&amp;','&')
+        s = s.replace('&#124;','|')
+        s = s.replace('&lt;','<')
+        s = s.replace('&gt;','>')
+        s = s.replace('&apos;','\'')
+        s = s.replace('&quot;','"')
+        s = s.replace('&#91;','[')
+        s = s.replace('&#93;',']')
+        return s
+
+    def _differs_only_by_space(self, s1, s2):
+        pass
+
+    def tokenize(self, s, spaces=(" "), escape=False):
         assert s == s.strip(), "spaces surrounding string not allowed"
+        if escape:
+            s = self._escape(s)
         spans = [[0,0]]
         for i,c in enumerate(s):
             if c in spaces:
@@ -78,9 +111,33 @@ class TokenTracker(object):
             assert start == None or start < len(s)
             assert end == None or end < len(s)
 
-    def track_detok(self, a, b, spans=None, verbose=False):
+    def track_detok(self, a, b, spans=None, verbose=False, check_escape=False):
+        """ input:
+            a: string AFTER tokenization
+            b: string BEFORE tokenization
+            spans: list of pairs of indices in a
+
+            returns: list of pairs of indices in b
+                that correspond to the input spans
+        """
+        if verbose:
+            print "tokenized:   ", a
+            print "untokenized: ", b
+
         if spans == None:
             spans = self.tokenize(a)
+        if a == b:
+            return spans
+
+        if check_escape:
+            a_unescaped = self._unescape(a)
+            b_unescaped = self._unescape(b)
+            if a_unescaped != a and b_unescaped == b: # escaping happened in this step
+                spans = self.track_detok(a,a_unescaped,
+                                         spans=spans,
+                                         verbose=verbose)
+                a = a_unescaped
+
         lev = Levenshtein(b, a)
         editops = lev.editops()
         #print editops
@@ -133,6 +190,7 @@ class TokenTracker(object):
                     print '|', "DELETED",
                 else:
                     print '|', b[start:end+1],
+            print "|"
         return new_spans
 
 

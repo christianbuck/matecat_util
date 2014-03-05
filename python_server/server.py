@@ -215,28 +215,42 @@ class Root(object):
 
     @cherrypy.expose
     def tokenize(self, **kwargs):
-	source = self.filter.filter(kwargs["q"])
-	target = self.filter.filter(kwargs["t"])
+        source = self.filter.filter(kwargs["q"])
+        target = self.filter.filter(kwargs["t"])
 
-	# pre-processing of source and target
-        source_tmp  = self.external_processors.tokenize(source)
-        source_tmp2 = self.external_processors.truecase(source_tmp)
-        source_tok  = self.external_processors.prepro(source_tmp2)
+        tracker = tokentracker.TokenTracker()
 
-        target_tmp = self.tgt_external_processors.tokenize(target)
-        target_tmp2 = self.tgt_external_processors.truecase(target_tmp)
-        target_tok = self.tgt_external_processors.prepro(target_tmp2)
+        # pre-processing of source and target
+        source_tokenized  = self.external_processors.tokenize(source)
+        # source_tokenized_unescaped = tracker.unescape(source, source_tokenized)
+        source_truecased = self.external_processors.truecase(source_tokenized)
+        source_preprocessed  = self.external_processors.prepro(source_truecased)
+
+        target_tokenized = self.tgt_external_processors.tokenize(target)
+        target_truecased = self.tgt_external_processors.truecase(target_tokenized)
+        target_preprocessed = self.tgt_external_processors.prepro(target_truecased)
 
         # get tokenized spans
         tracker = tokentracker.TokenTracker()
-        tmp = tracker.tokenize(source_tok)
-        source_spans = tracker.track_detok(source_tok, source, tmp)
-        tmp = tracker.tokenize(target_tok)
-        target_spans = tracker.track_detok(target_tok, target, tmp)
+
+        verbose = False
+        source_spans = tracker.track_detok(source_preprocessed, source_truecased, verbose=verbose)
+        source_spans = tracker.track_detok(source_truecased, source_tokenized, spans=source_spans, verbose=verbose)
+        source_spans = tracker.track_detok(source_tokenized, source, spans=source_spans, verbose=verbose, check_escape=True)
+
+        # tmp = tracker.tokenize(source_preprocessed, escape=True)
+        # source_spans = tracker.track_detok(source_preprocessed, source, tmp, verbose=True)
+        #source_spans = tracker.track_detok(source_preprocessed, source, verbose=True)
+        #tmp = tracker.tokenize(target_preprocessed)
+        #target_spans = tracker.track_detok(target_preprocessed, target)
+
+        target_spans = tracker.track_detok(target_preprocessed, target_truecased, verbose=verbose)
+        target_spans = tracker.track_detok(target_truecased, target_tokenized, spans=target_spans, verbose=verbose)
+        target_spans = tracker.track_detok(target_tokenized, target, spans=target_spans, verbose=verbose, check_escape=True)
  
-	align_data = {'sourceText':source, 'targetText':target, 'tokenization': { 'src': source_spans, 'tgt': target_spans } }
-        align_data['tokenizedTarget'] = target_tmp
-        align_data['tokenizedSource'] = source_tmp
+        align_data = {'sourceText':source, 'targetText':target, 'tokenization': { 'src': source_spans, 'tgt': target_spans } }
+        align_data['tokenizedTarget'] = target_preprocessed
+        align_data['tokenizedSource'] = source_preprocessed
         data = { "data" : align_data }
         return self._dump_json(data)
 
@@ -427,17 +441,17 @@ class Root(object):
 
     @cherrypy.expose
     def align(self, **kwargs):
-	response = cherrypy.response
-	response.headers['Content-Type'] = 'application/json'
+        response = cherrypy.response
+        response.headers['Content-Type'] = 'application/json'
 
         if self.symal == None:
             message = "need bidirectional aligner for updates"
             return self._dump_json ({"error": {"code":400, "message":message}})
 
-	source = self.filter.filter(kwargs["q"])
-	target = self.filter.filter(kwargs["t"])
+        source = self.filter.filter(kwargs["q"])
+        target = self.filter.filter(kwargs["t"])
 
-	# pre-processing of source and target
+        # pre-processing of source and target
         source_tmp  = self.external_processors.tokenize(source)
         source_tmp2 = self.external_processors.truecase(source_tmp)
         source_tok  = self.external_processors.prepro(source_tmp2)
@@ -446,7 +460,7 @@ class Root(object):
         target_tmp2 = self.tgt_external_processors.truecase(target_tmp)
         target_tok = self.tgt_external_processors.prepro(target_tmp2)
 
-	# word alignment
+        # word alignment
         mode = 's2t'
         if self.symal == None:
             message = "need bidirectional aligner for updates"
@@ -470,7 +484,7 @@ class Root(object):
         tmp = tracker.tokenize(target_tok)
         target_spans = tracker.track_detok(target_tok, target, tmp)
 
-	align_data = {'sourceText':source, 'targetText':target, 'alignment':alignment, 'tokenization': { 'src': source_spans, 'tgt': target_spans } }
+        align_data = {'sourceText':source, 'targetText':target, 'alignment':alignment, 'tokenization': { 'src': source_spans, 'tgt': target_spans } }
         data = {"data" : align_data}
         return self._dump_json(data)
 
