@@ -87,7 +87,9 @@ class ExternalProcessor(object):
             self.proc.stdin.write(u_string)
             self.proc.stdin.flush()
             result = self.proc.stdout.readline()
-        return result.decode("utf-8").rstrip()
+        return result.decode("utf-8").strip()
+        # should be rstrip but normalize_punctiation.perl inserts space
+        # for lines starting with '('
 
 class ExternalProcessors(object):
     """ single object that does all the pre- and postprocessing """
