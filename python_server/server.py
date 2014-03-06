@@ -215,45 +215,42 @@ class Root(object):
         data = {"data" : {"translations" : [{name : processor(q)}]}}
         return self._dump_json(data)
 
+    def _track_preprocessing(self, sentence, is_source, verbose=False):
+        processors = self.external_processors if is_source else self.tgt_external_processors
+        sentence_tokenized = processors.tokenize(sentence)
+        sentence_truecased = processors.truecase(sentence_tokenized)
+        sentence_preprocessed  = processors.prepro(sentence_truecased)
+        tracker = tokentracker.TokenTracker()
+        # tracker applied in opposite direction as final spans refer to input
+        spans = tracker.track_detok(sentence_preprocessed, sentence_truecased, verbose=verbose)
+        spans = tracker.track_detok(sentence_truecased, sentence_tokenized, spans=spans, verbose=verbose)
+        spans = tracker.track_detok(sentence_tokenized, sentence, spans=spans, verbose=verbose, check_escape=True)
+        return sentence_preprocessed, spans
+
+    def _track_postprocessing(self, sentence, verbose=False):
+        processors = self.external_processors
+        tracker = tokentracker.TokenTracker()
+        sentence_postprocessed  = processors.postpro(sentence)
+        sentence_detruecased = processors.detruecase(sentence_postprocessed)
+        sentence_detokenized = processors.detokenize(sentence_detruecased)
+        spans = tracker.track_detok(sentence, sentence_postprocessed, verbose=verbose)
+        spans = tracker.track_detok(sentence_postprocessed, sentence_detruecased, spans=spans, verbose=verbose)
+        spans = tracker.track_detok(sentence_detruecased, sentence_detokenized, spans=spans, verbose=verbose, check_escape=True)
+        return sentence_detokenized, spans
+
     @cherrypy.expose
     def tokenize(self, **kwargs):
         source = self.filter.filter(kwargs["q"])
         target = self.filter.filter(kwargs["t"])
 
-        tracker = tokentracker.TokenTracker()
+        source_preprocessed, source_spans = self._track_preprocessing(source, is_source=True)
+        target_preprocessed, target_spans = self._track_preprocessing(target, is_source=False)
 
-        # pre-processing of source and target
-        source_tokenized  = self.external_processors.tokenize(source)
-        # source_tokenized_unescaped = tracker.unescape(source, source_tokenized)
-        source_truecased = self.external_processors.truecase(source_tokenized)
-        source_preprocessed  = self.external_processors.prepro(source_truecased)
-
-        target_tokenized = self.tgt_external_processors.tokenize(target)
-        target_truecased = self.tgt_external_processors.truecase(target_tokenized)
-        target_preprocessed = self.tgt_external_processors.prepro(target_truecased)
-
-        # get tokenized spans
-        tracker = tokentracker.TokenTracker()
-
-        verbose = False
-        source_spans = tracker.track_detok(source_preprocessed, source_truecased, verbose=verbose)
-        source_spans = tracker.track_detok(source_truecased, source_tokenized, spans=source_spans, verbose=verbose)
-        source_spans = tracker.track_detok(source_tokenized, source, spans=source_spans, verbose=verbose, check_escape=True)
-
-        # tmp = tracker.tokenize(source_preprocessed, escape=True)
-        # source_spans = tracker.track_detok(source_preprocessed, source, tmp, verbose=True)
-        #source_spans = tracker.track_detok(source_preprocessed, source, verbose=True)
-        #tmp = tracker.tokenize(target_preprocessed)
-        #target_spans = tracker.track_detok(target_preprocessed, target)
-
-        target_spans = tracker.track_detok(target_preprocessed, target_truecased, verbose=verbose)
-        target_spans = tracker.track_detok(target_truecased, target_tokenized, spans=target_spans, verbose=verbose)
-        target_spans = tracker.track_detok(target_tokenized, target, spans=target_spans, verbose=verbose, check_escape=True)
- 
-        align_data = {'sourceText':source, 'targetText':target, 'tokenization': { 'src': source_spans, 'tgt': target_spans } }
+        align_data = {'sourceText':source, 'targetText':target}
+        align_data['tokenization'] = {'src': source_spans, 'tgt': target_spans}
         align_data['tokenizedTarget'] = target_preprocessed
         align_data['tokenizedSource'] = source_preprocessed
-        data = { "data" : align_data }
+        data = {"data" : align_data}
         return self._dump_json(data)
 
     @cherrypy.expose
@@ -284,7 +281,6 @@ class Root(object):
     def _translate(self, source, sg=False, align=False, topt=False, factors=False, nbest=0):
         """ wraps the actual translate call to mosesserver via XMLPRC """
         proxy = xmlrpclib.ServerProxy(self.moses_url)
-        #params = {"text":source, "align":"true", "report-all-factors":"false"}
         params = {"text":source}
         if align: params["align"] = "true"
         if sg: params["sg"] = "true"
@@ -323,21 +319,11 @@ class Root(object):
         self.log_info("Translation after removing additional info: %s" %translation)
 
         self.log_info("Translation before postprocessing: %s" %translation)
-        tt = tokentracker.TokenTracker()
-        raw_translation = translation
-        spans = tt.tokenize(raw_translation)
-        translation = self.external_processors.postpro(translation)
-        spans = tt.track_detok(raw_translation, translation, spans)
-        raw_translation = translation
-        translation = self.external_processors.detruecase(translation)
-        spans = tt.track_detok(raw_translation, translation, spans)
-        raw_translation = translation
-        translation = self.external_processors.detokenize(translation)
-        spans = tt.track_detok(raw_translation, translation, spans)
+        translationDict["translatedTextRaw"] = translation
+        translation, spans = self._track_postprocessing(translation)
         if not "tokenization" in translationDict:
             translationDict["tokenization"] = {}
         translationDict["tokenization"].update( {'tgt' : spans} )
-
         self.log_info("Translation after postprocessing: %s" %translation)
 
         if translation:
@@ -363,26 +349,31 @@ class Root(object):
 
         q = self.filter.filter(kwargs["q"])
         raw_src = q
-        self.log("The server is working on: %s" %repr(q))
-        self.log_info("Request before preprocessing: %s" %repr(q))
-        translationDict = {"sourceText":q.strip()}
-        q = self.external_processors.tokenize(q)
-        q = self.external_processors.truecase(q)
-        q = self.external_processors.prepro(q)
+        self.log("The server is working on: %s" %repr(raw_src))
+        self.log_info("Request before preprocessing: %s" %repr(raw_src))
+        translationDict = {"sourceText":raw_src.strip()}
+        #q = self.external_processors.tokenize(q)
+        #q = self.external_processors.truecase(q)
+        #q = self.external_processors.prepro(q)
 
-        self.log_info("Request after preprocessing: %s" %repr(q))
-        preprocessed_src = q
-        tt = tokentracker.TokenTracker()
-        src_spans = tt.tokenize(preprocessed_src)
-        src_spans = tt.track_detok(preprocessed_src, raw_src, src_spans)
+        preprocessed_src, src_spans = self._track_preprocessing(raw_src,
+                                                                is_source=True)
+
+        self.log_info("Request after preprocessing: %s" %repr(preprocessed_src))
+        #preprocessed_src = q
+        #tt = tokentracker.TokenTracker()
+        #src_spans = tt.tokenize(preprocessed_src)
+        #src_spans = tt.track_detok(preprocessed_src, raw_src, src_spans)
 
         self.log_info("Request before annotation: %s" %repr(q))
-        q = self.external_processors.annotate(q)
-        not_annotated_src = self._getOnlyTranslation(q)
+        #q = self.external_processors.annotate(q)
+        annotated_src = self.external_processors.annotate(preprocessed_src)
+        not_annotated_src = self._getOnlyTranslation(annotated_src)
         assert len(preprocessed_src.split()) == len(not_annotated_src.split()), \
                         "annotation should not change number of tokens"
+        translationDict = {"annotatedSource":annotated_src}
 
-        self.log_info("Request after annotation (q): %s" %repr(q))
+        self.log_info("Request after annotation (q): %s" %repr(annotated_src))
 
         translation = ''
         report_search_graph = 'sg' in kwargs
@@ -396,14 +387,16 @@ class Root(object):
         if 'wpp' in kwargs:
             nbest = max(nbest, int(kwargs['wpp']))
 
-        result = self._translate(q, sg=report_search_graph,
+        # query MT engine
+        result = self._translate(annotated_src,
+                                 sg=report_search_graph,
                                  topt = report_translation_options,
                                  align = report_alignment,
                                  nbest = nbest)
         if 'text' in result:
             translation = result['text']
         else:
-            return self._timeout_error(q, 'translation')
+            return self._timeout_error(annotated_src, 'translation')
         #print result.keys()
         translationDict.update(self._getTranslation(translation))
         translationDict["tokenization"].update( {'src' : src_spans} )
