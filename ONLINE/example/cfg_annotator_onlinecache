@@ -7,5 +7,8 @@ cblm_constrained_on_cbtm = 0
 cblm_improved_by_cbtm = 0
 cblm_improved_by_full_sentence = 0
 cblm_filter = 1
+cblm_id = MYCBLM 
+[annotation]
 cbtm = 1
 cbtm_filter = 1
+cbtm_id = MYCBLM 
