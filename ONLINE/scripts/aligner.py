@@ -59,6 +59,9 @@ class Aligner_Constrained_Search:
 		self.translation_option_extractor = parser.get('tools', 'aligner_options_extractor_path')
 		self.aligner = parser.get('tools', 'aligner_constrained_search_path')
                 self.tmpdir = parser.get('env', 'tmp')
+	        logformat = '%(asctime)s %(thread)d - %(filename)s:%(lineno)s: %(message)s'
+        	logging.basicConfig(format=logformat)
+        	self.logger = logging.getLogger('server_log.Aligner_Constrained_Search')
 
 	def align(self, source="", target="", correction="", moses_translation_options=""):
                 logging.info("SEARCHER correction:"+correction)
@@ -113,11 +116,15 @@ class Aligner_onlineGIZA:
                 self.gizaoptions = parser.get('annotation', 'giza-options')
                 self.tmpdir = parser.get('env', 'tmp')
 
+                logformat = '%(asctime)s %(thread)d - %(filename)s:%(lineno)s: %(message)s'
+                logging.basicConfig(format=logformat)
+                self.logger = logging.getLogger('server_log.Aligner_onlineGIZA')
+
 
                 self.parameters_s2t = self.s2tcfg+" " + self.gizaoptions + " -onlineMode 1"
                 self.parameters_t2s = self.t2scfg+" " + self.gizaoptions + " -onlineMode 1"
 
-		self.giza2bal = self.path + "/scripts/giza2bal.pl"
+		self.giza2bal = self.path + "/scripts/giza2bal_NEW.pl"
 		self.symal = self.path + "/bin/symal"
 		self.mgiza = self.path + "/bin/mgiza"
 
@@ -126,7 +133,10 @@ class Aligner_onlineGIZA:
 
 		self.err_signal_pattern = re.compile("^Alignment took [0-9]+ seconds")
 
+		#self.FNULL = open(os.devnull, 'w')
+		#self.log_s2t = open("LLL_s2t", 'w')
 		self.log_s2t = open(os.devnull, 'w')
+		#self.log_t2s = open("LLL_t2s", 'w')
 		self.log_t2s = open(os.devnull, 'w')
                 logging.info("MGIZA_CALL:|"+self.mgiza+' '+self.parameters_s2t+"|")
                 self.aligner_s2t = subprocess.Popen([self.mgiza]+self.parameters_s2t.split(),
@@ -141,57 +151,140 @@ class Aligner_onlineGIZA:
                         stderr=self.log_t2s,
                         shell=False)
                 logging.info("SYMAL_CALL:|"+self.symal+' '+self.symtype+"|")
+                logging.info("SYMAL_OPTIONS:|"+repr(self.symtype)+"|")
                 self.symal_proc = subprocess.Popen([self.symal]+self.symtype.split(),  stdin=subprocess.PIPE,  stdout=subprocess.PIPE)
+		self.log("self.symal_proc:|"+repr(self.symal_proc)+"|")
+		self.log("self.symal_proc.stdin:|"+repr(self.symal_proc.stdin)+"|")
 
- 
+                giza2bal_options = "-stdin "
+		self._giza2bal_separator = "_GIZA2BAL_SEP_"
+                logging.info("GIZA2BAL_OPTIONS:|"+repr(giza2bal_options)+"|")
+                logging.info("GIZA2BAL_CALL:|"+self.giza2bal+' '+giza2bal_options+"|")
+                self.giza2bal_proc = subprocess.Popen([self.giza2bal]+giza2bal_options.split(),  stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+                logging.info("GIZA2BAL_CALL: passed")
+		self.log("self.giza2bal_proc:|"+repr(self.giza2bal_proc)+"|")
+		self.log("self.giza2bal_proc.stdin:|"+repr(self.giza2bal_proc.stdin)+"|")
+
+	def log(self, message):
+        	self.logger.info(message)
+
         def align(self, source="", target="", correction="", moses_translation_options=""):
 		err = []
-                logging.info("ALIGNER source:"+source)
-                logging.info("ALIGNER correction:"+correction)
-
-# write target and source to a proper string 
+                self.log("SEARCHER source:"+source)
+                self.log("SEARCHER correction:"+correction)
+                # write target and source to a proper string 
                 aligner_input_src2trg = "<src>" + correction + "</src><trg>" + source + "</trg>"
                 aligner_input_trg2src = "<src>" + source + "</src><trg>" + correction + "</trg>"
 		aligner_input_src2trg = aligner_input_src2trg.lower()
 		aligner_input_trg2src = aligner_input_trg2src.lower()
 		rr = str(random.randint(0,1000000))
 
-#Source-Target          
-                logging.info("ALIGNER input s2t:"+aligner_input_src2trg)
+#Writing Source-Target  
+                self.log("ALIGNER HERE 0")
+                self.log("ALIGNER input s2t:"+aligner_input_src2trg)
+                self.log("ALIGNER HERE 0")
                 self.aligner_s2t.stdin.write(aligner_input_src2trg+'\n')
+                self.log("ALIGNER HERE 1")
                 self.aligner_s2t.stdin.flush()
-                self.aligner_s2t.stdout.flush()
+                self.log("ALIGNER HERE 2")
+#                self.aligner_s2t.stdout.flush()
 
-                response_src2trg = self.aligner_s2t.stdout.readline().strip() + '\n'
-                response_src2trg = response_src2trg + self.aligner_s2t.stdout.readline().strip() + '\n'
-                response_src2trg = response_src2trg + self.aligner_s2t.stdout.readline().strip() + '\n'
-
-                align_src2trg_file = self.tmpdir+"/_s2t"+str(os.getpid())+"_"+rr
-                write_to_file(align_src2trg_file, response_src2trg)
-
-                logging.info("ALIGNER output s2t:"+response_src2trg)
-#Target-Source          
-                logging.info("ALIGNER input t2s:"+aligner_input_trg2src)
+#Writing Target-Source
+                self.log("ALIGNER input t2s:"+aligner_input_trg2src)
+                self.log("ALIGNER HERE 0")
                 self.aligner_t2s.stdin.write(aligner_input_trg2src+'\n')
+                self.log("ALIGNER HERE 1")
                 self.aligner_t2s.stdin.flush()
-                self.aligner_t2s.stdout.flush()
+                self.log("ALIGNER HERE 2")
+#                self.aligner_t2s.stdout.flush()
 
-                response_trg2src = self.aligner_t2s.stdout.readline().strip() + '\n'
-                response_trg2src = response_trg2src + self.aligner_t2s.stdout.readline().strip() + '\n'
-                response_trg2src = response_trg2src + self.aligner_t2s.stdout.readline().strip() + '\n'
 
-                align_trg2src_file = self.tmpdir+"/_t2s"+str(os.getpid())+"_"+rr
-                write_to_file(align_trg2src_file, response_trg2src)
-                logging.info("ALIGNER output t2s:"+response_trg2src)
+#Reading Source-Target  
+#                response_src2trg = self.aligner_s2t.stdout.readline().strip() + '\n'
+#                logging.info("ALIGNER output s2t first:"+response_src2trg)
+#                response_src2trg = response_src2trg + self.aligner_s2t.stdout.readline().strip() + '\n'
+#                logging.info("ALIGNER output s2t second:"+response_src2trg)
+#                response_src2trg = response_src2trg + self.aligner_s2t.stdout.readline().strip() + '\n'
+#                logging.info("ALIGNER output s2t third:"+response_src2trg)
+#                self.aligner_s2t.stdout.flush()
+#                logging.info("ALIGNER output s2t:"+response_src2trg)
 
-#create the giza2bal 
-	        giza2bal_options = "-d " + align_trg2src_file + " -i " + align_src2trg_file
-                giza2bal_proc = subprocess.Popen([self.giza2bal]+ giza2bal_options.split(),  stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-		giza2bal_align1 = giza2bal_proc.stdout.readline().strip()
-		giza2bal_align2 = giza2bal_proc.stdout.readline().strip()
-		giza2bal_align3 = giza2bal_proc.stdout.readline().strip()
-                logging.info("GIZA2BAL s2t:|"+giza2bal_align2+"|")
-                logging.info("GIZA2BAL t2s:|"+giza2bal_align3+"|")
+                giza2bal_input1_s2t = self.aligner_s2t.stdout.readline().strip()
+                giza2bal_input2_s2t = self.aligner_s2t.stdout.readline().strip()
+                giza2bal_input3_s2t = self.aligner_s2t.stdout.readline().strip()
+                #logging.info("ALIGNER output s2t giza2bal_input1:"+giza2bal_input1_s2t)
+                #logging.info("ALIGNER output s2t giza2bal_input2:"+giza2bal_input2_s2t)
+                #logging.info("ALIGNER output s2t giza2bal_input3:"+giza2bal_input3_s2t)
+#                self.aligner_s2t.stdout.flush()
+		self.log("ALIGNER output s2t giza2bal_input1:|"+giza2bal_input1_s2t+"|")
+		self.log("ALIGNER output s2t giza2bal_input2:|"+giza2bal_input2_s2t+"|")
+		self.log("ALIGNER output s2t giza2bal_input3:|"+giza2bal_input3_s2t+"|")
+
+
+#Reading Target-Source          
+#                response_trg2src = self.aligner_t2s.stdout.readline().strip() + '\n'
+#                logging.info("ALIGNER output t2s first:"+response_trg2src)
+#                response_trg2src = response_trg2src + self.aligner_t2s.stdout.readline().strip() + '\n'
+#                logging.info("ALIGNER output t2s second:"+response_trg2src)
+#                response_trg2src = response_trg2src + self.aligner_t2s.stdout.readline().strip() + '\n'
+#                logging.info("ALIGNER output t2s third:"+response_trg2src)
+#                self.aligner_t2s.stdout.flush()
+#                logging.info("ALIGNER output t2s:"+response_trg2src)
+
+
+                giza2bal_input1_t2s = self.aligner_t2s.stdout.readline().strip()
+                giza2bal_input2_t2s = self.aligner_t2s.stdout.readline().strip()
+                giza2bal_input3_t2s = self.aligner_t2s.stdout.readline().strip()
+#                self.aligner_t2s.stdout.flush()
+                self.log("ALIGNER output t2s giza2bal_input1_t2s:|"+giza2bal_input1_t2s+"|")
+                self.log("ALIGNER output t2s giza2bal_input2_t2s:|"+giza2bal_input2_t2s+"|")
+                self.log("ALIGNER output t2s giza2bal_input3_t2s:|"+giza2bal_input3_t2s+"|")
+
+                giza2bal_input1 = giza2bal_input1_t2s + self._giza2bal_separator + giza2bal_input1_s2t
+                giza2bal_input2 = giza2bal_input2_t2s + self._giza2bal_separator + giza2bal_input2_s2t
+                giza2bal_input3 = giza2bal_input3_t2s + self._giza2bal_separator + giza2bal_input3_s2t
+                #logging.info("ALIGNER output t2s giza2bal_input1:"+giza2bal_input1)
+                #logging.info("ALIGNER output t2s giza2bal_input2:"+giza2bal_input2)
+                #logging.info("ALIGNER output t2s giza2bal_input3:"+giza2bal_input3)
+#                self.aligner_t2s.stdout.flush()
+                self.log("ALIGNER output t2s giza2bal_input1:|"+giza2bal_input1+"|")
+                self.log("ALIGNER output t2s giza2bal_input2:|"+giza2bal_input2+"|")
+                self.log("ALIGNER output t2s giza2bal_input3:|"+giza2bal_input3+"|")
+
+
+#Preparing the direct and inverted files for giza2bal
+#                align_src2trg_file = self.tmpdir+"/_s2t"+str(os.getpid())+"_"+rr
+#                logging.info("ALIGNER align_src2trg_file:"+align_src2trg_file)
+#                write_to_file(align_src2trg_file, response_src2trg)
+
+#                align_trg2src_file = self.tmpdir+"/_t2s"+str(os.getpid())+"_"+rr
+#                logging.info("ALIGNER  align_trg2src_file:"+align_trg2src_file)
+#                write_to_file(align_trg2src_file, response_trg2src)
+
+#create the giza2bal data 
+#	        giza2bal_options = "-d " + align_trg2src_file + " -i " + align_src2trg_file
+#               giza2bal_proc = subprocess.Popen([self.giza2bal]+ giza2bal_options.split(),  stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+#		giza2bal_align1 = giza2bal_proc.stdout.readline().strip()
+#		giza2bal_align2 = giza2bal_proc.stdout.readline().strip()
+#		giza2bal_align3 = giza2bal_proc.stdout.readline().strip()
+#                logging.info("GIZA2BAL s2t:|"+giza2bal_align2+"|")
+#                logging.info("GIZA2BAL t2s:|"+giza2bal_align3+"|")
+
+#create the giza2bal data
+		self.log("self.symal_proc:|"+repr(self.symal_proc)+"|")
+		self.log("self.symal_proc.stdin:|"+repr(self.symal_proc.stdin)+"|")
+		self.log("self.giza2bal_proc:|"+repr(self.giza2bal_proc)+"|")
+		self.log("self.giza2bal_proc.stdin:|"+repr(self.giza2bal_proc.stdin)+"|")
+		self.giza2bal_proc.stdin.write(giza2bal_input1+'\n')
+		self.giza2bal_proc.stdin.write(giza2bal_input2+'\n')
+		self.giza2bal_proc.stdin.write(giza2bal_input3+'\n')
+                giza2bal_align1 = self.giza2bal_proc.stdout.readline().strip()
+                giza2bal_align2 = self.giza2bal_proc.stdout.readline().strip()
+                giza2bal_align3 = self.giza2bal_proc.stdout.readline().strip()
+                #logging.info("GIZA2BAL s2t:|"+giza2bal_align2+"|")
+                #logging.info("GIZA2BAL t2s:|"+giza2bal_align3+"|")
+                self.log("GIZA2BAL s2t:|"+giza2bal_align2+"|")
+                self.log("GIZA2BAL t2s:|"+giza2bal_align3+"|")
 
 
 #symmetrize the alignments
@@ -200,14 +293,15 @@ class Aligner_onlineGIZA:
 		self.symal_proc.stdin.write(giza2bal_align3+'\n')
 
                 alignment = self.symal_proc.stdout.readline().strip()
-                logging.info("SYMAL_OUT: "+alignment.strip())
+                self.log("SYMAL_OUT: "+alignment.strip())
 
 # remove source and target strings	
 		alignment = re.sub("^.+{##}[ \t]*",'',alignment)
-                logging.info("SYMAL_OUT after string replacement: "+alignment.strip())
+                self.log("SYMAL_OUT after string replacement: "+alignment.strip())
 
-                # remove temporary files
-                os.remove(align_src2trg_file), os.remove(align_trg2src_file)
+# remove temporary files
+#                os.remove(align_src2trg_file), os.remove(align_trg2src_file)
+
                 return alignment.strip()
 
 
@@ -238,8 +332,8 @@ class Aligner_GIZA:
                 self.tmpdir = parser.get('env', 'tmp')
 
         def align(self, source="", target="", correction="", moses_translation_options=""):
-		logging.info("SEARCHER source:"+source)
-		logging.info("SEARCHER correction:"+correction)
+		self.log("SEARCHER source:"+source)
+		self.log("SEARCHER correction:"+correction)
 		# extract translation options from Moses output
 		# write target and source to temporary files
 		rr = str(random.randint(0,1000000))

@@ -25,26 +25,21 @@ def read_file(fn):
 	"""
 	return [line.strip() for line in open(fn)]
 
-class Annotator_dummy:
+class Annotator_Dummy:
         def __init__(self, parser):
-                self.cblm_annotation = int(parser.get('annotation', 'cblm'))
-                logging.info("self.cblm_annotation: "+str(self.cblm_annotation))
-                if self.cblm_annotation:
-                        logging.info("CBLM annotation is active")
-                else:
-                        logging.info("CBLM annotation is not active")
-
-                self.cbtm_annotation = int(parser.get('annotation', 'cbtm'))
-                logging.info("self.cbtm_annotation: "+str(self.cbtm_annotation))
-                if self.cbtm_annotation:
-                        logging.info("CBTM annotation is active")
-                else:  
-                        logging.info("CBTM annotation is not active")
+		self.parser = parser	
+                self.tmpdir = parser.get('env', 'tmp')
 
         def annotate(self, source):
                 return source
 
+        def cblm_update(self, correction):
+                # construct lm cache annotation
+                self.cblm_cache = ""
 
+        def cbtm_update(self, new=[], bias=[], full=[]):
+                # construct lm cache annotation
+                self.cbtm_cache = ""
 
 class Annotator_onlinexml:
 	def __init__(self, parser):
@@ -139,20 +134,20 @@ class Annotator_onlinexml:
                 """
                 Update phrase translation dictionaries.
                 """
-                for source, target in new:
-                        self.phrases["new"].setdefault(source, []).append(target)
-                for source, target in bias:
-                        self.phrases["bias"].setdefault(source, []).append(target)
-                for source, target in full:
-                        self.phrases["full"].setdefault(source, []).append(target)
+                for source, target, wa in new:
+                        self.phrases["new"].setdefault(source, []).append(target, wa)
+                for source, target, wa in bias:
+                        self.phrases["bias"].setdefault(source, []).append(target, wa)
+                for source, target, wa in full:
+                        self.phrases["full"].setdefault(source, []).append(target, wa)
 
-                for source, target in new:
+                for source, target, wa in new:
                         if not target in self.cblm_phrases:
                                 self.cblm_phrases.append(target)
-                for source, target in bias:
+                for source, target, wa in bias:
                         if not target in self.cblm_phrases:
                                 self.cblm_phrases.append(target)
-                for source, target in full:
+                for source, target, wa in full:
                         if not target in self.cblm_phrases:
                                 self.cblm_phrases.append(target)
 
@@ -206,7 +201,7 @@ class Annotator_onlinexml:
                 if not add_to_cache:
                         return ''
                 else:
-                        return '<dlt cblm="'+'||'.join(add_to_cache)+'"/>'
+                        return '<dlt type=cbtm cblm="'+'||'.join(add_to_cache)+'"/>'
 
         def annotate_sentence(self, sentence):
                 """
@@ -311,7 +306,8 @@ class Annotator_onlinexml:
                 options = {}
                 n_options = 0.
                 
-                if not translations:                        return options, 0.
+                if not translations:
+			return options, 0.
 
                 for translation in translations:
                                 options[translation] = options.setdefault(translation, 0.)+1.*weight
@@ -359,6 +355,21 @@ class Annotator_onlinecache:
                 self.n=int(parser.get('annotation', 'cblm_n_gram_level'))
                 logging.info("n: "+str(self.n))
 
+                try:
+                        parser.get('annotation', 'cbtm_id')
+                except:
+                        parser.set('annotation', 'cbtm_id', '')
+                logging.info("cbtm_id: "+parser.get('annotation', 'cbtm_id'))
+
+                try:
+                        parser.get('annotation', 'cblm_id')
+                except:
+                        parser.set('annotation', 'cblm_id', '')
+                logging.info("cblm_id: "+parser.get('annotation', 'cblm_id'))
+
+
+		self.cbtm_id = parser.get('annotation', 'cbtm_id')
+		self.cblm_id = parser.get('annotation', 'cblm_id')
                 self.cblm_filter=parser.get('annotation', 'cbtm_filter')
                 self.cbtm_filter=parser.get('annotation', 'cblm_filter')
                 self.stopwords_source = [l.strip() for l in open(parser.get('data', 'stopwords_source'))]
@@ -391,20 +402,20 @@ class Annotator_onlinecache:
 		"""
 		self.clear()
 
-                for source, target in new:
-                        self.phrases["new"].setdefault(source, []).append(target)
-                for source, target in bias:
-                        self.phrases["bias"].setdefault(source, []).append(target)
-                for source, target in full:
-                        self.phrases["full"].setdefault(source, []).append(target)
+                for source, target, wa in new:
+                        self.phrases["new"].setdefault(source, []).append([target, wa])
+                for source, target, wa in bias:
+                        self.phrases["bias"].setdefault(source, []).append([target, wa])
+                for source, target, wa in full:
+                        self.phrases["full"].setdefault(source, []).append([target, wa])
 
-		for source, target in new:
+		for source, target, wa in new:
 			if not target in self.cblm_phrases:
                         	self.cblm_phrases.append(target)
-                for source, target in bias:
+                for source, target, wa in bias:
 			if not target in self.cblm_phrases:
                         	self.cblm_phrases.append(target)
-                for source, target in full:
+                for source, target, wa in full:
 			if not target in self.cblm_phrases:
                         	self.cblm_phrases.append(target)
 
@@ -464,10 +475,21 @@ class Annotator_onlinecache:
 
                 logging.info("inside CBLM_CACHE "+repr(add_to_cache))
 		
-		if not add_to_cache:
-			return ''
-		else:
-			return '<dlt cblm="'+'||'.join(add_to_cache)+'"/>'
+#		if not add_to_cache:
+#			return ''
+#		else:
+#			return '<dlt cblm="'+'||'.join(add_to_cache)+'"/>'
+
+		cblmstr = ''
+                if add_to_cache:
+                        cblmstr = '<dlt'
+                        cblmstr += ' type="cblm"'
+                        if self.cblm_id != '':
+                                cblmstr += ' id="' + self.cblm_id + '"'
+                        cblmstr += ' cblm="'+'||'.join(add_to_cache)
+                        cblmstr += '"/>'
+		return cblmstr
+
 
         def get_cbtm_annotation(self):
                 """
@@ -497,8 +519,8 @@ class Annotator_onlinecache:
 						continue
 
 
-				target_phrases = type_phrases[source]
-				for target in target_phrases:
+				targetWA_phrases = type_phrases[source]
+				for target, wa in targetWA_phrases:
 	                                if int(self.cbtm_filter) == 1:
 						insert=0
 						for t in target.split():
@@ -508,15 +530,24 @@ class Annotator_onlinecache:
 						if insert == 0:
         	                               		continue
  
-					phrasepair = source + "|||" + target
+					phrasepair = source + "|||" + target + "|||" + wa
 					if not phrasepair in cbtm_phrases:
 						cbtm_phrases.append(phrasepair)
 
-                if not cbtm_phrases:
-                        return ''
-                else:
-	                return '<dlt cbtm="'+'||||'.join(cbtm_phrases)+'"/>'
+#                if not cbtm_phrases:
+#                        return ''
+#                else:
+#	                return '<dlt cbtm="'+'||||'.join(cbtm_phrases)+'"/>'
 
+                cbtmstr = ''
+                if cbtm_phrases:
+                        cbtmstr = '<dlt'
+                        cbtmstr += ' type="cbtm"'
+                        if self.cbtm_id != '':
+                                cbtmstr += ' id="' + self.cbtm_id + '"'
+                        cbtmstr += ' cbtm="'+'||||'.join(cbtm_phrases)
+                        cbtmstr += '"/>'
+                return cbtmstr
 
 def usage():
         """

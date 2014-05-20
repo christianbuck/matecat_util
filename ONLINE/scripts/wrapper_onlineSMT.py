@@ -1,11 +1,15 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 
 import sys, logging, os
 import codecs, subprocess, select, re, logging
+import time
+import random
+
 from decoder import Decoder_Moses, Decoder_Moses_nbest, Decoder_Deterministic 
 from aligner import Aligner_GIZA, Aligner_onlineGIZA, Aligner_Constrained_Search, Aligner_IBM1, Aligner_Dummy
+#from aligner import Aligner_GIZA, Aligner_onlineGIZA, Aligner_Constrained_Search, Aligner_IBM1, Aligner_Dummy, Aligner_Pivot
 from phrase_extractor import Extractor_Moses, Extractor_Constrained_Search, Extractor_Dummy
-from annotate import Annotator_onlinexml, Annotator_onlinecache
+from annotate import Annotator_onlinexml, Annotator_onlinecache, Annotator_Dummy
 
 from ConfigParser import SafeConfigParser
 
@@ -32,34 +36,44 @@ if __name__ == "__main__":
                 showweightsflag = "-show-weights"
         parser.set('decoder','showweightsflag',showweightsflag)
 
+	rrcode = str(random.randint(0,1000000))
+
 	decoder_type = parser.get('tools', 'decoder_type')
 	aligner_type = parser.get('tools', 'aligner_type')
 	extractor_type = parser.get('tools', 'extractor_type')
 	annotator_type = parser.get('tools', 'annotator_type')
+
+	walign_file = ""
+	walignflag = ""
 
 	input = open(parser.get('data', 'source'), 'r')
 	edit = open(parser.get('data', 'reference'), 'r')
 
 	decoder_options = ''
 	try:
-        	decoder_options = self.parser.get('decoder', 'options')
+        	decoder_options = parser.get('decoder', 'options')
         except:
         	pass
 
-        if aligner_type == "Constrained_Search" :
-		decoder_options = decoder_options + " -print-translation-option true"
         parser.set('decoder', 'options', decoder_options) 
 
-	if decoder_type == "Moses" :
+        if aligner_type == "Constrained_Search" :
+		decoder_options = decoder_options + " -print-translation-option true"
+
+        if decoder_type == "Moses":
+                Decoder_object = Decoder_Moses(parser)
+                
+	elif decoder_type == "Moses_WA":
+		logging.info("DECODER_TYPE: "+decoder_type)
+		walign_file = parser.get('env', 'tmp') + "/walign_" + rrcode
+		walignflag = "active"
+		logging.info("DECODER_OPTIONS: "+decoder_options)
+		decoder_options = decoder_options + " -alignment-output-file " + walign_file
+		parser.set('decoder', 'options', decoder_options)
+
+		logging.info("DECODER_OPTIONS: "+decoder_options)
+	
         	Decoder_object = Decoder_Moses(parser)
-                if not showweightsflag == "":
-                        decoder_out, decoder_err = Decoder_object.show_weights()
-
-                        # write weights to stdout
-                        sys.stdout.write(''.join(decoder_out))
-                        sys.stdout.flush()
-
-                        sys.exit(0)
 
 	elif decoder_type == "Moses_nbest" :
 		decoder_nbestfile = '/dev/stdout'
@@ -89,21 +103,25 @@ if __name__ == "__main__":
 		decoder_nbestout = open(decoder_nbestfile, 'w')
 
         	Decoder_object = Decoder_Moses_nbest(parser)
-                if not showweightsflag == "":
-                        decoder_out, decoder_err = Decoder_object.show_weights()
-
-                        # write weights to stdout
-                        sys.stdout.write(''.join(decoder_out))
-                        sys.stdout.flush()
-
-                        sys.exit(0)
 
 	elif decoder_type == "Deterministic" :
 	        Decoder_object = Decoder_Deterministic(parser)
 	else:
 		logging.info("This decoder is UNKNOWN")
 		sys.exit(1)
-	
+
+	if not showweightsflag == "":
+		if decoder_type == "Deterministic" :
+                	sys.exit(0)
+
+		decoder_out, decoder_err = Decoder_object.show_weights()
+		
+		# write weights to stdout
+		sys.stdout.write(''.join(decoder_out))
+		sys.stdout.flush()
+
+		sys.exit(0)
+
         if aligner_type == "GIZA" :
         	Aligner_object = Aligner_GIZA(parser)
         elif aligner_type == "onlineGIZA" :
@@ -117,6 +135,8 @@ if __name__ == "__main__":
                 	sys.exit(1)
         elif aligner_type == "Dummy" :
         	Aligner_object = Aligner_Dummy(parser)
+#        elif aligner_type == "Pivot" :
+#        	Aligner_object = Aligner_Pivot(parser)
 		
         else:
                 logging.info("This alignment tool  is UNKNOWN")
@@ -136,10 +156,19 @@ if __name__ == "__main__":
         	Annotator_object = Annotator_onlinexml(parser)
         elif annotator_type == "onlinecache" :
         	Annotator_object = Annotator_onlinecache(parser)
+        elif annotator_type == "Dummy" :
+        	Annotator_object = Annotator_Dummy(parser)
         else:
                 logging.info("This annotation tool  is UNKNOWN:")
                 sys.exit(1)
+
+	if not walignflag == "":
+		while not os.path.exists(walign_file):		
+			time.sleep (1.0 / 10);	
 	
+		walign = open(walign_file, 'r')
+                logging.info("walign_file " + walign_file + " is open ")
+
 	# main loop
 	# initialize: first sentence has no history
 	source = input.readline().strip()
@@ -151,7 +180,7 @@ if __name__ == "__main__":
 		# talk to decoder
 		logging.info("DECODER_IN: "+annotated_source)
                 logging.info("DECODER type:|%s|" % decoder_type)
-		if decoder_type == "Moses" :
+		if decoder_type == "Moses" or decoder_type == "Moses_WA" :
 	                decoder_out, decoder_err = Decoder_object.communicate(annotated_source)
         	        logging.info("DECODER_OUT: "+decoder_out)
 
@@ -191,9 +220,20 @@ if __name__ == "__main__":
 		logging.info("SOURCE: "+source)
 		logging.info("USER_EDIT: "+correction)
 
-		# get alignment information for the (source,correction)
-		aligner_output = Aligner_object.align(source=source,correction=correction,moses_translation_options=decoder_err)
-		logging.info("ALIGNER_OUTPUT: "+repr(aligner_output))
+                # now the source-to-target word-to-2word alignment is available
+		wa_s2t = ""
+                if not walignflag == "":
+			wa_s2t = walign.readline().strip()
+                logging.info("WA_S2T: "+wa_s2t)
+
+                if aligner_type == "Pivot" :
+			# get alignment information for the (source,correction)
+			aligner_output = Aligner_object.align(source=source,target=decoder_out,wa_s2t=wa_s2t,correction=correction,moses_translation_options=decoder_err)
+			logging.info("ALIGNER_OUTPUT: "+repr(aligner_output))
+		else:
+			# get alignment information for the (source,correction)
+			aligner_output = Aligner_object.align(source=source,correction=correction,moses_translation_options=decoder_err)
+			logging.info("ALIGNER_OUTPUT: "+repr(aligner_output))
 
 		# get phrase pairs form the alignment information
 		bias, new, full = Extractor_object.extract_phrases(source,correction,aligner_output)

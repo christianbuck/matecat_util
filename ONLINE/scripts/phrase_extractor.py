@@ -54,6 +54,7 @@ class Extractor_Constrained_Search:
         def __init__(self, parser):
                 self.parser = parser
                 self.tmpdir = parser.get('env', 'tmp')
+		self.empty_wa = ""
 
 	def extract_phrases(self, source, target, constrained_search_out):
         	"""
@@ -91,6 +92,7 @@ class Extractor_Constrained_Search:
 		full_pairs = []
 
 	        i = 0
+		#create empty word alignment between source and target words
 	        while i < len(t_prs):
 	                tok, algn = t_prs[i]
 	                #unaligned target span
@@ -108,31 +110,41 @@ class Extractor_Constrained_Search:
                 	#aligned target span (more than one word)
                 	elif '-' in algn:
                         	a, b = algn.strip().split('-')
-                        	applied_pairs.append((' '.join(s_tok[int(a):int(b)+1]), tok.strip()))
+                        	applied_pairs.append((' '.join(s_tok[int(a):int(b)+1]), tok.strip(), self.empty_wa))
                 	#aligned target word    
                 	else:
-                	        applied_pairs.append((s_tok[int(algn)].strip(), tok.strip()))
+                	        applied_pairs.append((s_tok[int(algn)].strip(), tok.strip(), self.empty_wa))
 
 	                i += 1
 
 	        s_unalgn, t_unalgn = self.filter_phrases(s_unalgn), self.filter_phrases(t_unalgn)
 
-	        #if a one-to-one corrspondence of unaligned source and target span was 
-	        #found, add as new phrase pair
+		#create many-to many word alignment between source and target words
+		wa = self.create_word_alignment(len(s_unalgn_tok), len(t_unalgn_tok))
+		
+	        #if a one-to-one corrspondence of unaligned source and target span was found,
+		#add as new phrase pair
 	        if len(s_unalgn) == 1 and len(s_unalgn) == len(t_unalgn):
-	                new_pairs.append((s_unalgn.pop(), t_unalgn.pop()))
+	                new_pairs.append((s_unalgn.pop(), t_unalgn.pop()), wa)
 	        #if no correspondance is found on phrase level, look at token level
 	        elif s_unalgn and t_unalgn:
 	                s_unalgn_tok = self.split_phrase(s_unalgn)
 	                t_unalgn_tok = self.split_phrase(t_unalgn)
 	                if len(s_unalgn_tok) == 1 and len(t_unalgn_tok) == 1:
-	                        new_pairs.append((s_unalgn_tok.pop(), t_unalgn_tok.pop()))
+	                        new_pairs.append((s_unalgn_tok.pop(), t_unalgn_tok.pop()), wa)
 	                else:
-	                        new_pairs += self.align(s_unalgn_tok, t_unalgn_tok)
+	                        new_pairs += self.align(s_unalgn_tok, t_unalgn_tok, wa)
 
-		full_pairs = [(source, target)]
+		full_pairs = [(source, target, wa)]
 
 	        return applied_pairs, new_pairs, full_pairs
+
+	def create_word_alignment(self, s_len, t_len):
+		wa = ""
+		for i in range(s_len):
+			for j in range(t_len):
+				wa += str(i) + "-" + str(j) + " "
+		return wa
 
         def split_line(self, line):
                 """
@@ -194,6 +206,7 @@ class Extractor_Moses:
         def __init__(self, parser):
                 self.parser = parser
                 self.extractor_script = parser.get('tools', 'extractor_path')
+		self.empty_wa = "X-X"
                 self.tmpdir = parser.get('env', 'tmp')
                 self.PPlen = parser.get('annotation', 'cbtm_phrase_length')
                 logging.info("self.extractor_script: "+self.extractor_script)
@@ -240,12 +253,14 @@ class Extractor_Moses:
 
 			src = tokens[0].strip()
 			trg = tokens[1].strip()
+			wa = tokens[2].strip()
 
-			bias_pairs.append((src, trg))
+			bias_pairs.append((src, trg, wa))
 		
 			PP = PP_stream.readline().strip()
 	
-		full_pairs = [(source ,target)]
+###		full_pairs = [(source, target, self.empty_wa)]
+		full_pairs = [(source, target, giza_symmetrized_alignment)]
 
                 # remove temporary files
                 os.remove(trg_file), os.remove(src_file), os.remove(align_file)

@@ -80,7 +80,7 @@ class Decoder_Moses:
 
 	        # set default parameters (if needed)
 	        default_decoder_options = "-xml-input inclusive"
-	        default_decoder_options = default_decoder_options + " -use-persistent-cache false"
+	        default_decoder_options = default_decoder_options + " -no-cache"
 	        try:
 	                self.parser.get('decoder', 'options')
 	        except:
@@ -195,7 +195,7 @@ class Decoder_Moses_nbest:
 
                 # set default parameters (if needed)
                 default_decoder_options = "-xml-input inclusive"
-                default_decoder_options = default_decoder_options + " -use-persistent-cache false"
+                default_decoder_options = default_decoder_options + " -no-cache false"
                 try:
                         self.parser.get('decoder', 'options')
                 except:
