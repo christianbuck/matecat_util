@@ -1,5 +1,5 @@
 [data]
-source = +PATH_TO_EXAMPLE_DIR_/input.en-it.en
-reference = +PATH_TO_EXAMPLE_DIR_/input.en-it.it
-stopwords_source = +PATH_TO_EXAMPLE_DIR_/stopwords.en
-stopwords_target = +PATH_TO_EXAMPLE_DIR_/stopwords.it
+source = _PATH_TO_EXAMPLE_DIR_/input.en-it.en
+reference = _PATH_TO_EXAMPLE_DIR_/input.en-it.it
+stopwords_source = _PATH_TO_EXAMPLE_DIR_/stopwords.en
+stopwords_target = _PATH_TO_EXAMPLE_DIR_/stopwords.it
