@@ -1,6 +1,6 @@
 [decoder]
 path = _PATH_TO_MOSES_DIR_/bin/moses
-ini = +PATH_TO_EXAMPLE_DIR_/moses.ini
+ini = _PATH_TO_EXAMPLE_DIR_/moses.ini
 nbestfile = -
 nbestsize = 30
 [tools]

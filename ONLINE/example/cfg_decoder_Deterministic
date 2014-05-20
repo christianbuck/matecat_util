@@ -1,5 +1,5 @@
 [decoder]
-source = +PATH_TO_EXAMPLE_DIR_/TM.en-it.en 
-target = +PATH_TO_EXAMPLE_DIR_/TM.en-it.it
+source = _PATH_TO_EXAMPLE_DIR_/TM.en-it.en 
+target = _PATH_TO_EXAMPLE_DIR_/TM.en-it.it
 [tools]
 decoder_type = Deterministic
