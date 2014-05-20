@@ -358,6 +358,79 @@ class Aligner_GIZA:
 		os.remove(crt_file), os.remove(src_file)
 		return alignment.strip()
 
+class Aligner_Pivot:
+	"""
+	Handles source-to-reference alignments using both source-to-hypothesis (moses alignments) AND hypothesis-to-reference (deduce from TER edit path).
+	"""
+	def __init__(self, parser):
+		self.parser = parser
+        	self.tmpdir = parser.get('env', 'tmp')
+
+        	self.tercpp = parser.get('tools', 'tercpp_path')
+        	self.aligner = parser.get('tools', 'aligner_path')
+        	self.tmpdir = parser.get('env', 'tmp')
+
+        	logformat = '%(asctime)s %(thread)d - %(filename)s:%(lineno)s: %(message)s'
+        	logging.basicConfig(format=logformat)
+        	self.logger = logging.getLogger('server_log.Aligner_Pivot')
+
+                logging.info("TER_CALL:|"+self.tercpp+"|")
+ 
+        def log(self, message):
+                self.logger.info(message)
+
+	def align(self, source="", target="", correction="", wa_srctohyp="", moses_translation_options=""):
+        	err = []
+        	logging.info("ALIGNER source: "+source)
+        	logging.info("ALIGNER hypothesis: "+target)
+        	logging.info("ALIGNER src-to-hyp wa_srctohyp: "+wa_srctohyp)
+        	logging.info("ALIGNER correction: "+correction)
+
+        	rr = str(random.randint(0,1000000))
+
+        	hyp_file = self.tmpdir+"/hyp"+str(os.getpid())+"_"+rr
+        	write_to_file(hyp_file, target + '\n')
+        	ref_file = self.tmpdir+"/ref"+str(os.getpid())+"_"+rr
+        	write_to_file(ref_file, correction + '\n')
+
+        	# SRC-TGT alignment
+        	decodalign_file = self.tmpdir+"/mosesalign"+str(os.getpid())+"_"+rr
+        	write_to_file(decodalign_file, wa_srctohyp + '\n')
+
+        	# TGT-REF alignment
+        	logging.info("TERCPP CALL:|"+self.tercpp+" --tercom --noTxtIds --printAlignments -r "+ref_file+" -h "+hyp_file+"|")
+        	tercpp_proc = subprocess.Popen([self.tercpp,"--tercom","--noTxtIds","--printAlignments","-r ",ref_file,"-h ",hyp_file], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+        	tercpp_stdout, tercpp_stderr = tercpp_proc.communicate()
+        	logging.info("TERCPP stdout: "+tercpp_stdout.strip())
+        	logging.info("TERCPP stderr: "+tercpp_stderr.strip())
+
+        	# SRC-REF alignment
+        	logging.info("BITEXT_CALL:|"+self.aligner+" "+decodalign_file+" "+hyp_file+".alignments"+"|")
+        	self.aligner_proc = subprocess.Popen([self.aligner, decodalign_file, hyp_file+".alignments"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+        	alignments = self.aligner_proc.stdout.readline().strip()
+        	logging.info("BITEXT_OUTPUT: "+alignments.strip())
+
+        	# remove temporary files
+        	os.remove(ref_file), os.remove(hyp_file), os.remove(decodalign_file), os.remove(hyp_file+".alignments"), os.remove(hyp_file+".output.sum.log")
+
+	        return alignments.strip()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 class Aligner_IBM1:
 
     def __init__(self, parser):

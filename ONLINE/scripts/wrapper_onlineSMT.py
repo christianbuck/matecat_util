@@ -6,8 +6,7 @@ import time
 import random
 
 from decoder import Decoder_Moses, Decoder_Moses_nbest, Decoder_Deterministic 
-from aligner import Aligner_GIZA, Aligner_onlineGIZA, Aligner_Constrained_Search, Aligner_IBM1, Aligner_Dummy
-#from aligner import Aligner_GIZA, Aligner_onlineGIZA, Aligner_Constrained_Search, Aligner_IBM1, Aligner_Dummy, Aligner_Pivot
+from aligner import Aligner_GIZA, Aligner_onlineGIZA, Aligner_Constrained_Search, Aligner_IBM1, Aligner_Dummy, Aligner_Pivot
 from phrase_extractor import Extractor_Moses, Extractor_Constrained_Search, Extractor_Dummy
 from annotate import Annotator_onlinexml, Annotator_onlinecache, Annotator_Dummy
 
@@ -135,9 +134,8 @@ if __name__ == "__main__":
                 	sys.exit(1)
         elif aligner_type == "Dummy" :
         	Aligner_object = Aligner_Dummy(parser)
-#        elif aligner_type == "Pivot" :
-#        	Aligner_object = Aligner_Pivot(parser)
-		
+        elif aligner_type == "Pivot" :
+        	Aligner_object = Aligner_Pivot(parser)
         else:
                 logging.info("This alignment tool  is UNKNOWN")
                 sys.exit(1)
@@ -221,14 +219,14 @@ if __name__ == "__main__":
 		logging.info("USER_EDIT: "+correction)
 
                 # now the source-to-target word-to-2word alignment is available
-		wa_s2t = ""
+		wa_srctohyp = ""
                 if not walignflag == "":
-			wa_s2t = walign.readline().strip()
-                logging.info("WA_S2T: "+wa_s2t)
+			wa_srctohyp = walign.readline().strip()
+                logging.info("WA_SRC2HYP: "+wa_srctohyp)
 
                 if aligner_type == "Pivot" :
 			# get alignment information for the (source,correction)
-			aligner_output = Aligner_object.align(source=source,target=decoder_out,wa_s2t=wa_s2t,correction=correction,moses_translation_options=decoder_err)
+			aligner_output = Aligner_object.align(source=source,target=decoder_out,wa_srctohyp=wa_srctohyp,correction=correction,moses_translation_options=decoder_err)
 			logging.info("ALIGNER_OUTPUT: "+repr(aligner_output))
 		else:
 			# get alignment information for the (source,correction)
@@ -249,4 +247,7 @@ if __name__ == "__main__":
                 annotated_source = Annotator_object.annotate(source)
 
 		s_id += 1
+
+	if not walignflag == "":
+        	os.remove(walign_file)
 
