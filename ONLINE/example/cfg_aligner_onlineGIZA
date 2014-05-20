@@ -2,7 +2,7 @@
 aligner_type = onlineGIZA
 mgiza_path = _PATH_TO_GIZAONLINE_DIR
 [annotation]
-src-trg-gizacfg = +PATH_TO_EXAMPLE_DIR_/en-it.gizacfg.online
-trg-src-gizacfg = +PATH_TO_EXAMPLE_DIR_/it-en.gizacfg.online
-giza-options = -m1 0 -m2 0 -m3 0 -m4 3 -m5 0 -mh 0 -restart 11 -o +PATH_TO_EXAMPLE_DIR_/
+src-trg-gizacfg = _PATH_TO_EXAMPLE_DIR_/en-it.gizacfg.online
+trg-src-gizacfg = _PATH_TO_EXAMPLE_DIR_/it-en.gizacfg.online
+giza-options = -m1 0 -m2 0 -m3 0 -m4 3 -m5 0 -mh 0 -restart 11 -o _PATH_TO_EXAMPLE_DIR_/
 sym-align-type = -a=union -d=yes -b=yes -f=yes

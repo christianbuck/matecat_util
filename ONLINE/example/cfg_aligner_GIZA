@@ -3,6 +3,6 @@ aligner_type = GIZA
 aligner_path = _PATH_TO_ONLINE_DIR_/alignment_by_GIZA/Aligner.sh
 mgiza_path = _PATH_TO_GIZA_DIR_
 [annotation]
-src-trg-gizacfg = +PATH_TO_EXAMPLE_DIR_/en-it.gizacfg
-trg-src-gizacfg = +PATH_TO_EXAMPLE_DIR_/it-en.gizacfg
+src-trg-gizacfg = _PATH_TO_EXAMPLE_DIR_/en-it.gizacfg
+trg-src-gizacfg = _PATH_TO_EXAMPLE_DIR_/it-en.gizacfg
 sym-align-type = intersect
