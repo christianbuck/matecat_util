@@ -4,6 +4,7 @@
 # - cfg_data
 # - either 	"cfg_decoder_Deterministic
 # - or 		"cfg_decoder_Moses"
+# - or 		"cfg_decoder_Moses_WA"
 # - or 		"cfg_decoder_Moses_nbest"
 # - either    "cfg_aligner_Constrained_Search" and "cfg_extractor_Constrained_Search"
 # - or        "cfg_aligner_GIZA" and "cfg_extractor_Moses"
@@ -16,11 +17,11 @@ cat cfg_env cfg_data cfg_decoder_Moses cfg_aligner_Constrained_Search cfg_extrac
 # or
 cat cfg_env cfg_data cfg_decoder_Moses cfg_aligner_GIZA cfg_extractor_Moses cfg_annotator_onlinexml  > cfg_complete
 # or
-cat cfg_env cfg_data cfg_decoder_Moses cfg_aligner_onlineGIZA cfg_extractor_Moses cfg_annotator_onlinexml  > cfg_complete
+cat cfg_env cfg_data cfg_decoder_Moses cfg_aligner_onlineGIZA cfg_extractor_Moses cfg_annotator_onlinecache  > cfg_complete
 # or
-cat cfg_env cfg_data cfg_decoder_Moses cfg_aligner_IBM1 cfg_extractor_Moses cfg_annotator_onlinexml  > cfg_complete
+cat cfg_env cfg_data cfg_decoder_Moses cfg_aligner_IBM1 cfg_extractor_Moses cfg_annotator_onlinecache  > cfg_complete
 # or
-cat cfg_env cfg_data cfg_decoder_Moses_nbest cfg_aligner_IBM1 cfg_extractor_Moses cfg_annotator_onlinexml  > cfg_complete
+cat cfg_env cfg_data cfg_decoder_Moses_nbest cfg_aligner_IBM1 cfg_extractor_Moses cfg_annotator_onlinecache  > cfg_complete
 
 # edit the complete configuration file "cfg_complete" with the actual data and executables
 
