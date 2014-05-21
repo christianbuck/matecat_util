@@ -1,29 +1,68 @@
+In order to run an experiment with the online wrapper the following steps are mandatory
 
-# create a complete configuration file "cfg_complete" by concatenating
-# - cfg_env
-# - cfg_data
-# - either 	"cfg_decoder_Deterministic
-# - or 		"cfg_decoder_Moses"
-# - or 		"cfg_decoder_Moses_WA"
-# - or 		"cfg_decoder_Moses_nbest"
-# - either    "cfg_aligner_Constrained_Search" and "cfg_extractor_Constrained_Search"
-# - or        "cfg_aligner_GIZA" and "cfg_extractor_Moses"
-# - or        "cfg_aligner_onlineGIZA" and "cfg_extractor_Moses"
-# - or        "cfg_aligner_IBM1" and "cfg_extractor_Moses"
-# - either    "cfg_annotator_onlinexml"
-# - or        "cfg_annotator_onlinecache"
-# like for example:
-cat cfg_env cfg_data cfg_decoder_Moses cfg_aligner_Constrained_Search cfg_extractor_Constrained_Search cfg_annotator_onlinexml  > cfg_complete
-# or
-cat cfg_env cfg_data cfg_decoder_Moses cfg_aligner_GIZA cfg_extractor_Moses cfg_annotator_onlinexml  > cfg_complete
-# or
-cat cfg_env cfg_data cfg_decoder_Moses cfg_aligner_onlineGIZA cfg_extractor_Moses cfg_annotator_onlinecache  > cfg_complete
-# or
-cat cfg_env cfg_data cfg_decoder_Moses cfg_aligner_IBM1 cfg_extractor_Moses cfg_annotator_onlinecache  > cfg_complete
-# or
-cat cfg_env cfg_data cfg_decoder_Moses_nbest cfg_aligner_IBM1 cfg_extractor_Moses cfg_annotator_onlinecache  > cfg_complete
+Step 1:
+- create a complete configuration file "cfg_complete" by concatenating
+  - cfg_env
+  - cfg_data
+  - one of the cfg_decoderr***:
+   -- either 	"cfg_decoder_Deterministic
+    -- or 		"cfg_decoder_Moses"
+    -- or 		"cfg_decoder_Moses_WA"
+    -- or 		"cfg_decoder_Moses_nbest"
+  - one of the cfg_aligner***
+    -- either    "cfg_aligner_Constrained_Search"
+    -- or        "cfg_aligner_GIZA"
+    -- or        "cfg_aligner_onlineGIZA"
+    -- or        "cfg_aligner_Pivot"
+    -- or        "cfg_aligner_IBM1"
+  - one of the cfg_extractor***
+    -- either    "cfg_extractor_Constrained_Search"
+    -- or        "cfg_extractor_Moses"
+  - one of the cfg_annotator***
+    -- either    "cfg_annotator_onlinexml"
+    -- or        "cfg_annotator_onlinecache"
 
-# edit the complete configuration file "cfg_complete" with the actual data and executables
+- Note that some combinations are not allowed:
+  - "cfg_aligner_Pivot" requires "cfg_decoder_Moses_WA"
+  - "cfg_extractor_Constrained_Search" requires "cfg_aligner_Constrained_Search"
+  - "cfg_extractor_Moses" requires any cfg_aligner*** but "cfg_aligner_Constrained_Search"
 
-# run the wrapper for the online translation
+
+- Here is a partial list of some valid combinations:
+  - cat cfg_env cfg_data cfg_decoder_Moses cfg_aligner_Constrained_Search cfg_extractor_Constrained_Search cfg_annotator_onlinexml  > cfg_complete
+  - cat cfg_env cfg_data cfg_decoder_Moses cfg_aligner_onlineGIZA cfg_extractor_Moses cfg_annotator_onlinecache  > cfg_complete
+  - cat cfg_env cfg_data cfg_decoder_Moses_WA cfg_aligner_Pivot cfg_extractor_Moses cfg_annotator_onlinecache  > cfg_complete
+  - cat cfg_env cfg_data cfg_decoder_Moses_nbest cfg_aligner_IBM1 cfg_extractor_Moses cfg_annotator_onlinecache  > cfg_complete
+
+
+Step 2:
+- edit the complete configuration file "cfg_complete" with the actual data and executables
+- basically you have to replace the _PATH_*** template with your actual models and executables
+
+- Note that the Moses decoder should be the one including:
+  -- new format of the configuration file
+  -- support for cache-based dynamic models
+  -- support for output word-to-word alignment (if cfg_decoder_Moses_WA is selected)
+  -- Moses with this setup is available in the GitHub branch "dynamic-models"
+
+- Note that if cfg_aligner_onlineGiza is selected, onlineMGIZA++ (version 0.1) is required
+  -- it is available at this URL
+     https://hermessvn.fbk.eu/svn/hermes/open/software/onlineMGIZA++/onlineMGIZA++_v0.2.tgz
+
+- Note that if cfg_aligner_Pivot is selected, tercpp (version 0.6.2) is required
+  -- IMPORTANT for MacOSx 10.6:
+     --- the official release does not compile with g++-0.4.2:
+     --- to fix: chabge line 67 in "./test/main.cpp:
+	<<<<<  ORIGINAL
+            p.debugLevel = infos
+	-----
+            p.debugLevel = atoi(infos.c_str());
+	>>>> FIXED
+
+Step 3:
+- check whether all files and executables referred to in the configuration files are reachable
+
+- Note that configuration files linked by parameters "src-trg-gizacfg" and "trg-src-gizacfg" contain other files to check; hence, please check whether these files are also available
+
+Step 4:
 python ../scripts/wrapper_onlineSMT.py cfg_complete
