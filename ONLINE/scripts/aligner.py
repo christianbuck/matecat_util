@@ -124,7 +124,7 @@ class Aligner_onlineGIZA:
                 self.parameters_s2t = self.s2tcfg+" " + self.gizaoptions + " -onlineMode 1"
                 self.parameters_t2s = self.t2scfg+" " + self.gizaoptions + " -onlineMode 1"
 
-		self.giza2bal = self.path + "/scripts/giza2bal_NEW.pl"
+		self.giza2bal = self.path + "/scripts/giza2bal.pl"
 		self.symal = self.path + "/bin/symal"
 		self.mgiza = self.path + "/bin/mgiza"
 
@@ -404,6 +404,9 @@ class Aligner_Pivot:
         	tercpp_stdout, tercpp_stderr = tercpp_proc.communicate()
         	logging.info("TERCPP stdout: "+tercpp_stdout.strip())
         	logging.info("TERCPP stderr: "+tercpp_stderr.strip())
+
+		tercpp_alignment = read_file(hyp_file+".alignments")
+        	logging.info("TERCPP wa_hyptoref: "+repr(tercpp_alignment))
 
         	# SRC-REF alignment
         	logging.info("BITEXT_CALL:|"+self.aligner+" "+decodalign_file+" "+hyp_file+".alignments"+"|")
