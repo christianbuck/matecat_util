@@ -52,7 +52,7 @@ Step 2:
 - Note that if cfg_aligner_Pivot is selected, tercpp (version 0.6.2) is required
   -- IMPORTANT for MacOSx 10.6:
      --- the official release does not compile with g++-0.4.2:
-     --- to fix: chabge line 67 in "./test/main.cpp:
+     --- to fix: change line 67 in "./test/main.cpp":
 	<<<<<  ORIGINAL
             p.debugLevel = infos
 	-----
