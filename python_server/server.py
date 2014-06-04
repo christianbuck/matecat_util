@@ -9,7 +9,7 @@ import re
 import xmlrpclib
 import math
 from threading import Timer
-from aligner import hmmalign
+from aligner import mgiza, symal, aligner
 from tokentracker import tokentracker
 from confidence import wpp
 
@@ -131,7 +131,7 @@ class Root(object):
         self.moses_url = moses_url
         self.external_processors = external_processors
         self.tgt_external_processors = tgt_external_processors
-        self.symal = bidir_aligner
+        self.bidir_aligner = bidir_aligner
 
         self.expected_params = {}
         if slang:
@@ -352,21 +352,10 @@ class Root(object):
         self.log("The server is working on: %s" %repr(raw_src))
         self.log_info("Request before preprocessing: %s" %repr(raw_src))
         translationDict = {"sourceText":raw_src.strip()}
-        #q = self.external_processors.tokenize(q)
-        #q = self.external_processors.truecase(q)
-        #q = self.external_processors.prepro(q)
-
         preprocessed_src, src_spans = self._track_preprocessing(raw_src,
                                                                 is_source=True)
-
         self.log_info("Request after preprocessing: %s" %repr(preprocessed_src))
-        #preprocessed_src = q
-        #tt = tokentracker.TokenTracker()
-        #src_spans = tt.tokenize(preprocessed_src)
-        #src_spans = tt.track_detok(preprocessed_src, raw_src, src_spans)
-
         self.log_info("Request before annotation: %s" %repr(q))
-        #q = self.external_processors.annotate(q)
         annotated_src = self.external_processors.annotate(preprocessed_src)
         not_annotated_src = self._getOnlyTranslation(annotated_src)
         assert len(preprocessed_src.split()) == len(not_annotated_src.split()), \
@@ -397,7 +386,6 @@ class Root(object):
             translation = result['text']
         else:
             return self._timeout_error(annotated_src, 'translation')
-        #print result.keys()
         translationDict.update(self._getTranslation(translation))
         translationDict["tokenization"].update( {'src' : src_spans} )
 
@@ -439,7 +427,7 @@ class Root(object):
         response = cherrypy.response
         response.headers['Content-Type'] = 'application/json'
 
-        if self.symal == None:
+        if self.bidir_aligner == None:
             message = "need bidirectional aligner for updates"
             return self._dump_json ({"error": {"code":400, "message":message}})
 
@@ -447,66 +435,106 @@ class Root(object):
         target = self.filter.filter(kwargs["t"])
 
         # pre-processing of source and target
-        source_tmp  = self.external_processors.tokenize(source)
-        source_tmp2 = self.external_processors.truecase(source_tmp)
-        source_tok  = self.external_processors.prepro(source_tmp2)
-
-        target_tmp = self.tgt_external_processors.tokenize(target)
-        target_tmp2 = self.tgt_external_processors.truecase(target_tmp)
-        target_tok = self.tgt_external_processors.prepro(target_tmp2)
+        source_preprocessed, source_spans = self._track_preprocessing(source, is_source=True)
+        target_preprocessed, target_spans = self._track_preprocessing(target, is_source=False)
 
         # word alignment
         mode = 's2t'
-        if self.symal == None:
+        if 'mode' in kwargs:
+            mode = self.filter.filter(kwargs["mode"])
+        if self.bidir_aligner == None:
             message = "need bidirectional aligner for updates"
             return self._dump_json ({"error": {"code":400, "message":message}})
         alignment = ''
         if mode == 's2t':
-            alignment = self.symal.align_s2t(source_tok, target_tok)
-        elif mode == 't2f':
-            alignment = self.symal.align_t2s(source_tok, target_tok)
+            alignment = self.bidir_aligner.s2t.align(source_preprocessed, target_preprocessed)
+            target_preprocessed = target_preprocessed.split()
+            source_preprocessed = source_preprocessed.split()
+            print alignment, target_preprocessed
+            assert len(target_preprocessed) == len(alignment)
+            alignment_dict = []
+            for tgt_idx, (a, tgt_word) in enumerate(zip(alignment, target_preprocessed)):
+                if a != 0:
+                    alignment_dict.append( {"src_idx": a-1,
+                                            "tgt_idx": tgt_idx,
+                                            "src_word": source_preprocessed[a-1],
+                                            "tgt_word": target_preprocessed[tgt_idx]})
+            alignment = alignment_dict
+        elif mode == 't2s':
+            alignment = self.bidir_aligner.t2s.align(target_preprocessed, source_preprocessed)
+            target_preprocessed = target_preprocessed.split()
+            source_preprocessed = source_preprocessed.split()
+
+            assert len(source_preprocessed) == len(alignment)
+            alignment_dict = []
+            for src_idx, (a, src_word) in enumerate(zip(alignment, source_preprocessed)):
+                if a != 0:
+                    alignment_dict.append( {"tgt_idx": a-1,
+                                            "src_idx": src_idx,
+                                            "src_word": source_preprocessed[src_idx],
+                                            "tgt_word": target_preprocessed[a-1]})
+            alignment = alignment_dict
+
         elif mode == 'sym':
-            alignment = self.symal.symal(source_tok, target_tok)
+            a_s2t = self.bidir_aligner.s2t.align(source_preprocessed, target_preprocessed)
+            a_t2s = self.bidir_aligner.t2s.align(target_preprocessed, source_preprocessed)
+            alignment = self.bidir_aligner.symal.symmetrize(source_preprocessed, target_preprocessed, a_s2t, a_t2s)
+
+            target_preprocessed = target_preprocessed.split()
+            source_preprocessed = source_preprocessed.split()
+
+            assert len(target_preprocessed) == len(a_s2t)
+            assert len(source_preprocessed) == len(a_t2s)
+
+            alignment_dict = []
+            for src_idx, tgt_idx in alignment:
+            #for tgt_idx, src_idx in alignment:
+                alignment_dict.append( {"tgt_idx": tgt_idx,
+                                        "src_idx": src_idx,
+                                        "src_word": source_preprocessed[src_idx],
+                                        "tgt_word": target_preprocessed[tgt_idx]})
+            alignment = alignment_dict
+
+            print "alignment afer symal:", alignment
         else:
-            message = "unknow alignment mode %s" %mode
+            message = "unknown alignment mode %s" %mode
             return self._dump_json ({"error": {"code":400, "message":message}})
-        alignment = [point for point in alignment if point[0] != -1 and point[1] != -1]
+        #alignment = [point for point in alignment if point[0] != -1 and point[1] != -1]
 
-        # get tokenized spans
-        tracker = tokentracker.TokenTracker()
-        tmp = tracker.tokenize(source_tok)
-        source_spans = tracker.track_detok(source_tok, source, tmp)
-        tmp = tracker.tokenize(target_tok)
-        target_spans = tracker.track_detok(target_tok, target, tmp)
-
-        align_data = {'sourceText':source, 'targetText':target, 'alignment':alignment, 'tokenization': { 'src': source_spans, 'tgt': target_spans } }
+        align_data = {'sourceText':source,
+                      'targetText':target,
+                      'alignment':alignment,
+                      'tokenization': { 'src': source_spans, 'tgt': target_spans }
+                     }
         data = {"data" : align_data}
         return self._dump_json(data)
 
     @cherrypy.expose
     def update(self, source, target, segment, translation):
-        if self.symal == None:
+        if self.bidir_aligner == None:
             message = "need bidirectional aligner for updates"
             return self._dump_json ({"error": {"code":400, "message":message}})
 
-        #source_lang = source
-        #target_lang = target
+        segment_preprocessed, segment_spans = self._track_preprocessing(segment, is_source=True)
+        translation_preprocessed, translation_spans = self._track_preprocessing(translation, is_source=False)
 
-        segment = self.external_processors.tokenize(segment)
-        segment = self.external_processors.truecase(segment)
-        segment = self.external_processors.prepro(segment)
+        a_s2t = self.bidir_aligner.s2t.align(segment_preprocessed, translation_preprocessed)
+        a_t2s = self.bidir_aligner.t2s.align(translation_preprocessed, segment_preprocessed)
+        assert len(translation_preprocessed.split()) == len(a_s2t)
+        assert len(segment_preprocessed.split()) == len(a_t2s)
 
-        translation = self.tgt_external_processors.tokenize(translation)
-        translation = self.tgt_external_processors.truecase(translation)
-        translation = self.tgt_external_processors.prepro(translation)
+        alignment = self.bidir_aligner.symal.symmetrize(segment_preprocessed, translation_preprocessed, a_s2t, a_t2s)
+        alignment_strings = []
+        for src_idx, tgt_idx in alignment:
+            alignment_strings.append( "%d-%d" %(src_idx, tgt_idx) )
 
-        alignment = self.symal.symal(segment, translation)
+        self.log("Updating model with src: %s tgt: %s, align: %s" \
+                 %(segment_preprocessed,
+                   translation_preprocessed,
+                   " ".join(alignment_strings)))
 
-        self.log("Updating model with src: %s tgt: %s, align: %s" %(segment,
-                                                                    translation,
-                                                                    alignment))
-        self._update(segment, translation, alignment)
-        update_dict = {'segment':segment, 'translation':translation, 'alignment':alignment}
+        self._update(segment_preprocessed, translation_preprocessed, " ".join(alignment_strings))
+        update_dict = {'segment':segment_preprocessed, 'translation':translation_preprocessed, 'alignment':alignment}
         data = {"data" : {"update" : [update_dict]}}
         return self._dump_json(data)
 
@@ -547,15 +575,17 @@ if __name__ == "__main__":
     #parser.add_argument('-wpp-n', dest='wpp_n', help="length of nbest list to compute wpps from")
 
     # Options to run the Bidirectional Aligner for Online Adaptation
-    parser.add_argument('-s2t-hmm', dest='s2t_hmm', help="HMM transition probs from GIZA++")
-    parser.add_argument('-s2t-lex', dest='s2t_lex', help="translation probs p(src|tgt)")
-    parser.add_argument('-t2s-hmm', dest='t2s_hmm', help="HMM transition probs from GIZA++")
-    parser.add_argument('-t2s-lex', dest='t2s_lex', help="translation probs p(tgt|src)")
-    parser.add_argument('-sourcevoc', help="source vocabulary")
-    parser.add_argument('-targetvoc', help="target vocabulary")
+    #parser.add_argument('-s2t-hmm', dest='s2t_hmm', help="HMM transition probs from GIZA++")
+    #parser.add_argument('-s2t-lex', dest='s2t_lex', help="translation probs p(src|tgt)")
+    #parser.add_argument('-t2s-hmm', dest='t2s_hmm', help="HMM transition probs from GIZA++")
+    #parser.add_argument('-t2s-lex', dest='t2s_lex', help="translation probs p(tgt|src)")
+    #parser.add_argument('-sourcevoc', help="source vocabulary")
+    #parser.add_argument('-targetvoc', help="target vocabulary")
+    #parser.add_argument('-pnull', type=float, help="jump probability to/from NULL word (default: 0.4)", default=0.4)
+    #parser.add_argument('-minp', help='minimal translation probability, used to prune the model', default=0.0, type=float)
     parser.add_argument('-symal', help="path to symal, including arguments")
-    parser.add_argument('-pnull', type=float, help="jump probability to/from NULL word (default: 0.4)", default=0.4)
-    parser.add_argument('-minp', help='minimal translation probability, used to prune the model', default=0.0, type=float)
+    parser.add_argument('-omgiza_src2tgt', help='path of online-MGiza++, including arguments for src-tgt alignment')
+    parser.add_argument('-omgiza_tgt2src', help='path of online-MGiza++, including arguments for tgt-src alignment')
 
     parser.add_argument('-pretty', action='store_true', help='pretty print json')
     parser.add_argument('-slang', help='source language code')
@@ -586,15 +616,11 @@ if __name__ == "__main__":
                                                  args.tgt_prepro,
                                                  [], [], [], [], [])
 
-    ba = None
-    if args.s2t_hmm and args.s2t_lex and args.t2s_hmm and args.t2s_lex \
-        and args.sourcevoc and args.targetvoc and args.symal:
-        sys.stderr.write("loading bidirectional aligner...\n")
-        ba = hmmalign.BidirectionalAligner(args.sourcevoc, args.targetvoc,
-                                           args.s2t_hmm, args.s2t_lex,
-                                           args.t2s_hmm, args.t2s_lex,
-                                           args.minp, args.pnull,
-                                           symal = args.symal)
+    # online MGiza++ processes for alignment
+    giza_s2t = mgiza.OnlineMGiza(args.omgiza_src2tgt) if args.omgiza_src2tgt else None
+    giza_t2s = mgiza.OnlineMGiza(args.omgiza_tgt2src) if args.omgiza_tgt2src else None
+    symal_wrapper = symal.SymalWrapper(args.symal) if args.symal else None
+    bidir_aligner = aligner.BidirectionalAligner(giza_s2t, giza_t2s, symal_wrapper)
 
     cherrypy.config.update({'server.request_queue_size' : 1000,
                             'server.socket_port': args.port,
@@ -608,7 +634,7 @@ if __name__ == "__main__":
     cherrypy.quickstart(Root(args.moses_url,
                              external_processors = external_processors,
                              tgt_external_processors = tgt_external_processors,
-                             bidir_aligner = ba,
+                             bidir_aligner = bidir_aligner,
                              slang = args.slang, tlang = args.tlang,
                              pretty = args.pretty,
                              verbose = args.verbose))
