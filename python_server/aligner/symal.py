@@ -23,7 +23,8 @@ class SymalWrapper(object):
         print "Result from symal: ", repr(result)
         if not result.strip():
             return []
-        result = result.split("{##}")[2].strip().split()
+        result = result.split()
         result = [map(int, a.split('-')) for a in result]
+        print "Processed: ", repr(result)
         return result
         #return result.decode("utf-8").rstrip()
