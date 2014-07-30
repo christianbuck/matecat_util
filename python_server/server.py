@@ -377,11 +377,13 @@ class Root(object):
             nbest = max(nbest, int(kwargs['wpp']))
 
         # query MT engine
+	print "requesting translation"
         result = self._translate(annotated_src,
                                  sg=report_search_graph,
                                  topt = report_translation_options,
                                  align = report_alignment,
                                  nbest = nbest)
+	print "received translation"
         if 'text' in result:
             translation = result['text']
         else:
@@ -434,26 +436,40 @@ class Root(object):
         source = self.filter.filter(kwargs["q"])
         target = self.filter.filter(kwargs["t"])
 
+        print "Aligning: %s / %s" %(source.encode('utf8'),target.encode('utf8'))
+
         # pre-processing of source and target
         source_preprocessed, source_spans = self._track_preprocessing(source, is_source=True)
         target_preprocessed, target_spans = self._track_preprocessing(target, is_source=False)
 
-        # word alignment
+        # set mode
         mode = 's2t'
         if 'mode' in kwargs:
             mode = self.filter.filter(kwargs["mode"])
+
+	# aligner must exist
         if self.bidir_aligner == None:
             message = "need bidirectional aligner for updates"
             return self._dump_json ({"error": {"code":400, "message":message}})
+
+	# return empty alignment matrix on failure
         alignment = ''
-        if mode == 's2t':
+
+        if len(target_preprocessed) == 0 or len(source_preprocessed) == 0:
+	    print "no target words... return no alignment points"
+	    alignment = []
+        elif mode == 's2t':
+	    print "yep. %s / %s" %(source_preprocessed.encode('utf8'),target_preprocessed.encode('utf8'))
             alignment = self.bidir_aligner.s2t.align(source_preprocessed, target_preprocessed)
+	    print "yep. %s" % alignment
             target_preprocessed = target_preprocessed.split()
             source_preprocessed = source_preprocessed.split()
             print alignment, target_preprocessed
-            assert len(target_preprocessed) == len(alignment)
+	    print "len %s : %s" %(len(target_preprocessed), target_preprocessed)
+	    print "len %s : %s" %(len(alignment), alignment)
             alignment_dict = []
-            for tgt_idx, (a, tgt_word) in enumerate(zip(alignment, target_preprocessed)):
+            if len(target_preprocessed) == len(alignment):
+              for tgt_idx, (a, tgt_word) in enumerate(zip(alignment, target_preprocessed)):
                 if a != 0:
                     alignment_dict.append( {"src_idx": a-1,
                                             "tgt_idx": tgt_idx,
@@ -510,28 +526,40 @@ class Root(object):
         return self._dump_json(data)
 
     @cherrypy.expose
-    def update(self, source, target, segment, translation):
+    def update(self, source, target, q, t):
         if self.bidir_aligner == None:
             message = "need bidirectional aligner for updates"
             return self._dump_json ({"error": {"code":400, "message":message}})
 
-        segment_preprocessed, segment_spans = self._track_preprocessing(segment, is_source=True)
-        translation_preprocessed, translation_spans = self._track_preprocessing(translation, is_source=False)
+        segment_preprocessed, segment_spans = self._track_preprocessing(q, is_source=True)
+        translation_preprocessed, translation_spans = self._track_preprocessing(t, is_source=False)
+
+        if len(segment_preprocessed) == 0 or len(translation_preprocessed) == 0:
+            message = "segment or translation is empty - rejected"
+            return self._dump_json ({"error": {"code":400, "message":message}})
+
+        if len(segment_preprocessed) * 4 < len(translation_preprocessed) or len(segment_preprocessed) > 4 * len(translation_preprocessed):
+            message = "length mismatch - rejected"
+            return self._dump_json ({"error": {"code":400, "message":message}})
 
         a_s2t = self.bidir_aligner.s2t.align(segment_preprocessed, translation_preprocessed)
         a_t2s = self.bidir_aligner.t2s.align(translation_preprocessed, segment_preprocessed)
         assert len(translation_preprocessed.split()) == len(a_s2t)
         assert len(segment_preprocessed.split()) == len(a_t2s)
 
+        print "E";
         alignment = self.bidir_aligner.symal.symmetrize(segment_preprocessed, translation_preprocessed, a_s2t, a_t2s)
+        print "F";
         alignment_strings = []
         for src_idx, tgt_idx in alignment:
             alignment_strings.append( "%d-%d" %(src_idx, tgt_idx) )
+        print "G %s" % alignment_strings;
 
         self.log("Updating model with src: %s tgt: %s, align: %s" \
-                 %(segment_preprocessed,
-                   translation_preprocessed,
+                 %(segment_preprocessed.encode('utf8'),
+                   translation_preprocessed.encode('utf8'),
                    " ".join(alignment_strings)))
+        print "H";
 
         self._update(segment_preprocessed, translation_preprocessed, " ".join(alignment_strings))
         update_dict = {'segment':segment_preprocessed, 'translation':translation_preprocessed, 'alignment':alignment}

@@ -41,8 +41,8 @@ class OnlineMGiza(object):
 
     def align(self, src, tgt):
         unicode_pair = u"<src>%s</src><trg>%s</trg>\n" %(src, tgt)
-        print unicode_pair
         unicode_pair = unicode_pair.encode("utf-8")
+        print unicode_pair
         pair_info, target, source_aligned = self.__process(unicode_pair)
         alignment = self._parse_alignment(target, source_aligned)
         #alignment.sort()
