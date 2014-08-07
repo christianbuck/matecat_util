@@ -127,7 +127,7 @@ class TokenTracker(object):
             print "untokenized: ", b.encode("utf-8")
 
         if spans == None:
-            spans = self.tokenize(a)
+            spans = self.tokenize(a.encode("utf-8"))
         if a == b:
             return spans
 
@@ -170,6 +170,8 @@ class TokenTracker(object):
         # opcodes('a funnny joke', 'a fun yoke')
         # -> [('equal', 0, 5, 0, 5), ('delete', 5, 8, 5, 5), ('equal', 8, 9, 5, 6), ('replace', 9, 10, 6, 7), ('equal', 10, 13, 7, 10)]
         alignment = []
+        a = a.encode("utf-8")
+        b = b.encode("utf-8")
         for operation in opcodes(a,b):
           #print operation
           if operation[0] == 'equal' or operation[0] == 'replace':
