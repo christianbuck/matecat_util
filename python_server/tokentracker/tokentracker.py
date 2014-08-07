@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+from Levenshtein import *
+
 class Levenshtein(object):
     OPS = ["I", "D", "S", "K"]
     INS, DEL, SUB, KEEP = OPS
@@ -121,8 +123,8 @@ class TokenTracker(object):
                 that correspond to the input spans
         """
         if verbose:
-            print "tokenized:   ", a
-            print "untokenized: ", b
+            print "tokenized:   ", a.encode("utf-8")
+            print "untokenized: ", b.encode("utf-8")
 
         if spans == None:
             spans = self.tokenize(a)
@@ -138,33 +140,60 @@ class TokenTracker(object):
                                          verbose=verbose)
                 a = a_unescaped
 
-        lev = Levenshtein(b, a)
-        editops = lev.editops()
+        #lev = Levenshtein(b, a)
+        #editops = lev.editops()
         #print editops
-        a_idx = 0
-        b_idx = 0
-        alignment = []
-        for op in editops:
-            if verbose:
-                print (a_idx, a[a_idx], b_idx, b[b_idx], op)
-            if op == Levenshtein.KEEP:
-                assert a[a_idx] == b[b_idx], (a_idx, a[a_idx], b_idx, b[b_idx], op)
-                alignment.append((a_idx, b_idx))
-                a_idx += 1
-                b_idx += 1
-            elif op == Levenshtein.DEL: # deleted in b
+        #a_idx = 0
+        #b_idx = 0
+        #alignment = []
+        #for op in editops:
+            #if verbose:
+                #print (a_idx, a[a_idx], b_idx, b[b_idx], op)
+            #if op == Levenshtein.KEEP:
+                #assert a[a_idx] == b[b_idx], (a_idx, a[a_idx], b_idx, b[b_idx], op)
                 #alignment.append((a_idx, b_idx))
-                a_idx += 1
-            elif op == Levenshtein.INS:
-                b_idx += 1
-            elif op == Levenshtein.SUB:
-                assert a[a_idx] != b[b_idx], (a_idx, a[a_idx], b_idx, b[b_idx], op)
-                alignment.append((a_idx, b_idx))
-                a_idx += 1
-                b_idx += 1
-            else:
-                assert False, repr(op)
+                #a_idx += 1
+                #b_idx += 1
+            #elif op == Levenshtein.DEL: # deleted in b
+                #a_idx += 1
+            #elif op == Levenshtein.INS:
+                #b_idx += 1
+            #elif op == Levenshtein.SUB:
+                #assert a[a_idx] != b[b_idx], (a_idx, a[a_idx], b_idx, b[b_idx], op)
+                #alignment.append((a_idx, b_idx))
+                #a_idx += 1
+                #b_idx += 1
+            #else:
+                #assert False, repr(op)
+
+        # use https://github.com/ztane/python-Levenshtein
+        # opcodes('a funnny joke', 'a fun yoke')
+        # -> [('equal', 0, 5, 0, 5), ('delete', 5, 8, 5, 5), ('equal', 8, 9, 5, 6), ('replace', 9, 10, 6, 7), ('equal', 10, 13, 7, 10)]
+        alignment = []
+        for operation in opcodes(a,b):
+          #print operation
+          if operation[0] == 'equal' or operation[0] == 'replace':
+            offset_a = operation[1]
+            offset_b = operation[3]
+            # prefer del-match-ins over replace-replace (both are 2 edits)
+	    if operation[2]-operation[1] == 2 and (a[operation[1]] == b[operation[3]+1] or a[operation[1]+1] == b[operation[3]]):
+	      if a[operation[1]] == b[operation[3]+1]:
+                alignment.append((offset_a,offset_b+1))   
+              else:
+                alignment.append((offset_a+1,offset_b))
+            # default
+            else: 
+              for i in range(operation[2]-operation[1]):
+                alignment.append((offset_a+i,offset_b+i))
         #print alignment
+
+        #i=0
+        #for point_old in a_old:
+        #  point = alignment[i]
+        #  if point[0] != point_old[0] or point[1] != point_old[1]:
+        #    print "diff: %s vs %s" % (point_old,point)
+        #  i = i+1
+
         alignment = dict(alignment)
         new_spans = []
         #print spans
