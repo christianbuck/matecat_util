@@ -218,25 +218,25 @@ class Root(object):
 
     def _track_preprocessing(self, sentence, is_source, verbose=False):
         processors = self.external_processors if is_source else self.tgt_external_processors
-        sentence_tokenized = processors.tokenize(sentence)
+        sentence_preprocessed  = processors.prepro(sentence)
+        sentence_tokenized = processors.tokenize(sentence_preprocessed)
         sentence_truecased = processors.truecase(sentence_tokenized)
-        sentence_preprocessed  = processors.prepro(sentence_truecased)
         tracker = tokentracker.TokenTracker()
         # tracker applied in opposite direction as final spans refer to input
-        spans = tracker.track_detok(sentence_preprocessed, sentence_truecased, verbose=verbose)
-        spans = tracker.track_detok(sentence_truecased, sentence_tokenized, spans=spans, verbose=verbose)
-        spans = tracker.track_detok(sentence_tokenized, sentence, spans=spans, verbose=verbose, check_escape=True)
-        return sentence_preprocessed, spans
+        spans = tracker.track_detok(sentence_truecased, sentence_tokenized, verbose=verbose)
+        spans = tracker.track_detok(sentence_tokenized, sentence_preprocessed, spans=spans, verbose=verbose, check_escape=True)
+        spans = tracker.track_detok(sentence_preprocessed, sentence, spans=spans, verbose=verbose)
+        return sentence_truecased, spans
 
     def _track_postprocessing(self, sentence, verbose=False):
         processors = self.external_processors
         tracker = tokentracker.TokenTracker()
-        sentence_postprocessed  = processors.postpro(sentence)
-        sentence_detruecased = processors.detruecase(sentence_postprocessed)
+        sentence_detruecased = processors.detruecase(sentence)
         sentence_detokenized = processors.detokenize(sentence_detruecased)
-        spans = tracker.track_detok(sentence, sentence_postprocessed, verbose=verbose)
-        spans = tracker.track_detok(sentence_postprocessed, sentence_detruecased, spans=spans, verbose=verbose)
+        sentence_postprocessed  = processors.postpro(sentence_detokenized)
+        spans = tracker.track_detok(sentence_postprocessed, sentence_detokenized, verbose=verbose)
         spans = tracker.track_detok(sentence_detruecased, sentence_detokenized, spans=spans, verbose=verbose, check_escape=True)
+        spans = tracker.track_detok(sentence, sentence_detruecased, verbose=verbose, spans=spans)
         return sentence_detokenized, spans
 
     @cherrypy.expose
