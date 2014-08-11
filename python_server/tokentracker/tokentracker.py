@@ -173,7 +173,6 @@ class TokenTracker(object):
         a = a.encode("utf-8")
         b = b.encode("utf-8")
         for operation in opcodes(a,b):
-          #print operation
           if operation[0] == 'equal' or operation[0] == 'replace':
             offset_a = operation[1]
             offset_b = operation[3]
@@ -187,18 +186,9 @@ class TokenTracker(object):
             else: 
               for i in range(operation[2]-operation[1]):
                 alignment.append((offset_a+i,offset_b+i))
-        #print alignment
-
-        #i=0
-        #for point_old in a_old:
-        #  point = alignment[i]
-        #  if point[0] != point_old[0] or point[1] != point_old[1]:
-        #    print "diff: %s vs %s" % (point_old,point)
-        #  i = i+1
 
         alignment = dict(alignment)
         new_spans = []
-        #print spans
         for start, end in spans:
             mapped_idx = []
             for a_idx in range(start, end+1):

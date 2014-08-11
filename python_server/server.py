@@ -234,9 +234,9 @@ class Root(object):
         sentence_detruecased = processors.detruecase(sentence)
         sentence_detokenized = processors.detokenize(sentence_detruecased)
         sentence_postprocessed  = processors.postpro(sentence_detokenized)
-        spans = tracker.track_detok(sentence_postprocessed, sentence_detokenized, verbose=verbose)
+        spans = tracker.track_detok(sentence, sentence_detruecased, verbose=verbose)
         spans = tracker.track_detok(sentence_detruecased, sentence_detokenized, spans=spans, verbose=verbose, check_escape=True)
-        spans = tracker.track_detok(sentence, sentence_detruecased, verbose=verbose, spans=spans)
+        spans = tracker.track_detok(sentence_postprocessed, sentence_detokenized, spans=spans, verbose=verbose)
         return sentence_detokenized, spans
 
     @cherrypy.expose
