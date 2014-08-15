@@ -3,13 +3,13 @@ import sys
 import subprocess
 import os
 import re
+import multiprocessing
 
 #Example output from mgiza:
 """# Sentence pair (1) source length 1 target length 1 alignment score : 9.99e-15
 #Musharraf
 #NULL ({ }) Moucharraf ({ 1 })
 """
-
 
 class OnlineMGiza(object):
 
@@ -27,29 +27,47 @@ class OnlineMGiza(object):
                                      stdout=subprocess.PIPE,
                                      stderr=self.devnull)
 
-    def __process(self, source_target_pair):
+    def __process(self, source_target_pair, ret):
+        print source_target_pair
         self.proc.stdin.write(source_target_pair)
         self.proc.stdin.flush()
-        pair_info = self.proc.stdout.readline().strip()
-        target = self.proc.stdout.readline().strip()
-        source_aligned = self.proc.stdout.readline().strip()
-        print "pair info:" ,pair_info
-        print "target: " ,target
-        print "source_aligned: ", source_aligned
-        self.__restart()
-        return pair_info, target, source_aligned
+        ret["pair_info"] = self.proc.stdout.readline().strip()
+        ret["target"] = self.proc.stdout.readline().strip()
+        ret["source_aligned"] = self.proc.stdout.readline().strip()
+        print "pair info:", ret["pair_info"]
+        print "target: ", ret["target"]
+        print "source_aligned: ", ret["source_aligned"]
 
     def align(self, src, tgt):
         unicode_pair = u"<src>%s</src><trg>%s</trg>\n" %(src, tgt)
         unicode_pair = unicode_pair.encode("utf-8")
         print unicode_pair
-        pair_info, target, source_aligned = self.__process(unicode_pair)
-        alignment = self._parse_alignment(target, source_aligned)
-        #alignment.sort()
+
+        # prepare process to call mgiza with timout
+        manager = multiprocessing.Manager()
+        ret = manager.dict()
+        p = multiprocessing.Process(target=self.__process, args=(unicode_pair,ret))
+        p.start()
+        p.join(1) # wait for one second
+
+
+        # success
+        if not p.is_alive():
+          alignment = self._parse_alignment(ret["target"], ret["source_aligned"])
+          print alignment
+          print "len: %d / %d" % (len(alignment),len(tgt.split()))
+          if len(alignment) == len(tgt.split()):
+            return alignment
+
+        # failure
+        print "mgiza crashed"
+        p.terminate()
+        p.join()
+        self.proc.kill()
+        self.proc = None
+        self.__restart()
+        alignment = [0] * len(tgt.split())
         print alignment
-        #assert len(alignment) == len(tgt.split()), \
-        #    "alignment length: %s target length: %s\n" \
-        #    %(len(alignment), len(tgt.split()))
         return alignment
 
     def _parse_alignment(self, target, aligned_source):
