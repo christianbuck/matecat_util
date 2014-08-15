@@ -320,7 +320,9 @@ class Root(object):
         self.log_info("Translation after removing additional info: %s" %translation)
 
         self.log_info("Translation before postprocessing: %s" %translation)
+        translation = translation.encode("utf-8").decode("utf-8") # madness
         translationDict["translatedTextRaw"] = translation
+
         translation, spans = self._track_postprocessing(translation)
         if not "tokenization" in translationDict:
             translationDict["tokenization"] = {}
