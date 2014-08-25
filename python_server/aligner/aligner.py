@@ -63,8 +63,8 @@ if __name__ == "__main__":
 
     print args.omgiza_src2tgt
     print args.omgiza_tgt2src
-    giza_s2t = mgiza.OnlineMGiza(args.omgiza_src2tgt)
-    giza_t2s = mgiza.OnlineMGiza(args.omgiza_tgt2src)
+    giza_s2t = mgiza.OnlineMGiza(args.omgiza_src2tgt, None)
+    giza_t2s = mgiza.OnlineMGiza(args.omgiza_tgt2src, None)
 
     s = "1 january 1974"
     t = "il 1 gennaio 1974"

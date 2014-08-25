@@ -648,8 +648,10 @@ if __name__ == "__main__":
                                                  [], [], [], [], [])
 
     # online MGiza++ processes for alignment
-    giza_s2t = mgiza.OnlineMGiza(args.omgiza_src2tgt) if args.omgiza_src2tgt else None
-    giza_t2s = mgiza.OnlineMGiza(args.omgiza_tgt2src) if args.omgiza_tgt2src else None
+    giza_s2t_log = args.logprefix + ".omgiza_src2tgt" if args.logprefix else None
+    giza_t2s_log = args.logprefix + ".omgiza_tgt2src" if args.logprefix else None
+    giza_s2t = mgiza.OnlineMGiza(args.omgiza_src2tgt,giza_s2t_log) if args.omgiza_src2tgt else None
+    giza_t2s = mgiza.OnlineMGiza(args.omgiza_tgt2src,giza_t2s_log) if args.omgiza_tgt2src else None
     symal_wrapper = symal.SymalWrapper(args.symal) if args.symal else None
     bidir_aligner = aligner.BidirectionalAligner(giza_s2t, giza_t2s, symal_wrapper)
 

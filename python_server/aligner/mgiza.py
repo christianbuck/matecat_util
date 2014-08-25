@@ -3,6 +3,7 @@ import sys
 import subprocess
 import os
 import re
+import time
 import multiprocessing
 
 #Example output from mgiza:
@@ -13,59 +14,132 @@ import multiprocessing
 
 class OnlineMGiza(object):
 
-    def __init__(self, commandline):
+    def __init__(self, commandline, logfile):
         self.cmd = commandline.split()
         self.devnull = open(os.devnull, "w")
         self.proc = None
+        self.ready = False
+        self.logfile = logfile
+        print "trying to match sourcevocabularyfile against %s" % commandline
+        result = re.match(r".+sourcevocabularyfile (\S+) .+",commandline)
+        if result:
+          print "-> %s" % result.group(1)
+        self.src_vcb = self.__load_dictionary(result.group(1)) if result else None
+        result = re.match(r".+targetvocabularyfile (\S+) .+",commandline)
+        self.tgt_vcb = self.__load_dictionary(result.group(1)) if result else None
+        sys.stdout.flush()
+        self.cache = dict()
         self.__restart()
 
+    # cache handling
+    def __load_dictionary(self, filename):
+        print "load dictionary %s " % filename
+        dictionary = set()
+        for line in open(filename,"r"):
+          item = line.split()
+          dictionary.add(item[1])
+        return dictionary
+ 
+    def __check_in_cache(self, source, target):
+      key = self.__cache_key(source,target)
+      return self.cache.get(key)
+
+    def __store_in_cache(self, source, target, alignment):
+      key = self.__cache_key(source,target)
+      print "mgiza: store in cache: %s" % key.encode('utf-8')
+      self.cache[ key ] = alignment
+
+    def __cache_key(self, source, target):
+      if self.src_vcb and self.tgt_vcb:
+        return "".join([self.__junk_unknown(source,self.src_vcb)," *+++* ",self.__junk_unknown(target,self.tgt_vcb)])
+      else:
+        return "".join([source," *+++* ",target])
+
+    def __junk_unknown(self, line, dictionary):
+      return " ".join([ word if word in dictionary else "***" for word in line.split()])
+
+    # start the mgiza binary process
     def __restart(self):
         if self.proc:
             self.proc.communicate("EOA\n")
+        if self.logfile:
+            err = open(self.logfile,"wb")
+        else:
+            err = self.devnull
+        self.ready = False
         self.proc = subprocess.Popen(self.cmd,
                                      stdin=subprocess.PIPE,
                                      stdout=subprocess.PIPE,
-                                     stderr=self.devnull)
+                                     stderr=err)
 
+    def __check_if_ready( self ):
+        if self.ready:
+          return True
+        if not self.logfile:
+          return True
+        log = open(self.logfile,"r")
+        for line in log:
+          if line.find("Please enter new sentence pair") >= 0:
+            print "mgiza: ready"
+            self.ready = True
+            return True
+        print "mgiza: not ready"
+        return False
+        
     def __process(self, source_target_pair, ret):
         print source_target_pair
-        self.proc.stdin.write(source_target_pair)
-        self.proc.stdin.flush()
-        ret["pair_info"] = self.proc.stdout.readline().strip()
-        ret["target"] = self.proc.stdout.readline().strip()
-        ret["source_aligned"] = self.proc.stdout.readline().strip()
+        try:
+          self.proc.stdin.write(source_target_pair)
+          self.proc.stdin.flush()
+          ret["pair_info"] = self.proc.stdout.readline().strip()
+          ret["target"] = self.proc.stdout.readline().strip()
+          ret["source_aligned"] = self.proc.stdout.readline().strip()
+        except:
+          ret["pair_info"] = ""
+          ret["target"] = ""
+          ret["source_aligned"] = "there was an error"
         print "pair info:", ret["pair_info"]
         print "target: ", ret["target"]
         print "source_aligned: ", ret["source_aligned"]
 
     def align(self, src, tgt):
-        unicode_pair = u"<src>%s</src><trg>%s</trg>\n" %(src, tgt)
-        unicode_pair = unicode_pair.encode("utf-8")
-        print unicode_pair
+        alignment = self.__check_in_cache(src, tgt)
+        if alignment is not None:
+          print "mgiza cache: %s " % alignment
+          return alignment
+        print "mgiza: not in cache"
 
-        # prepare process to call mgiza with timout
-        manager = multiprocessing.Manager()
-        ret = manager.dict()
-        p = multiprocessing.Process(target=self.__process, args=(unicode_pair,ret))
-        p.start()
-        p.join(1) # wait for one second
+        ready = self.__check_if_ready()
+        if ready:
+          unicode_pair = u"<src>%s</src><trg>%s</trg>\n" %(src, tgt)
+          unicode_pair = unicode_pair.encode("utf-8")
+          print unicode_pair
 
+          # prepare process to call mgiza with timout
+          manager = multiprocessing.Manager()
+          ret = manager.dict()
+          p = multiprocessing.Process(target=self.__process, args=(unicode_pair,ret))
+          p.start()
+          p.join(1) # wait for one second max
 
-        # success
-        if not p.is_alive():
-          alignment = self._parse_alignment(ret["target"], ret["source_aligned"])
-          print alignment
-          print "len: %d / %d" % (len(alignment),len(tgt.split()))
-          if len(alignment) == len(tgt.split()):
-            return alignment
+          # success
+          if not p.is_alive():
+            self.ready = True
+            alignment = self._parse_alignment(ret["target"], ret["source_aligned"])
+            print alignment
+            print "len: %d / %d" % (len(alignment),len(tgt.split()))
+            if len(alignment) == len(tgt.split()):
+              self.__store_in_cache(src, tgt, alignment)
+              return alignment
 
-        # failure
-        print "mgiza crashed"
-        p.terminate()
-        p.join()
-        self.proc.kill()
-        self.proc = None
-        self.__restart()
+          # failure
+          print "mgiza crashed"
+          p.terminate()
+          p.join()
+          self.proc.kill()
+          self.proc = None
+          self.__restart()
+        # dummy response
         alignment = [0] * len(tgt.split())
         print alignment
         return alignment
@@ -102,5 +176,5 @@ if __name__ == "__main__":
     parser.add_argument('omgiza', help='path of online-MGiza++, including arguments')
     args = parser.parse_args(sys.argv[1:])
 
-    giza = OnlineMGiza(args.omgiza)
+    giza = OnlineMGiza(args.omgiza,None)
     giza.align("Moucharraf", "Musharraf")
