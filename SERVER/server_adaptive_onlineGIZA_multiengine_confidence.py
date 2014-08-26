@@ -159,10 +159,9 @@ class UpdaterProc(object):
 	return annotated_source
 
     def reset(self):
-        annotated_source = ''
-        annotated_source = annotated_source + '<dlt cblm-command="clear"/>'
-        annotated_source = annotated_source + '<dlt cbtm-command="clear"/>'
-	return annotated_source
+        dummy_source = ""
+        annotated_source = self.Annotator_object.reset(dummy_source)
+        return annotated_source
 
     def log(self, message):
         self.logger.info(message)

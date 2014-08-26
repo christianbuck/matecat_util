@@ -378,6 +378,10 @@ class Annotator_onlinecache:
                 self.phrases = {"new": {}, "bias": {}, "full": {}}
                 self.cblm_phrases = []
 
+        def reset(self, source):
+                annotated_source = source + self.get_cbtm_reset() + self.get_cblm_reset()
+                return annotated_source
+
         def annotate(self, source):
                 annotated_source = source + self.cbtm_cache + self.cblm_cache
                 return annotated_source
@@ -489,6 +493,24 @@ class Annotator_onlinecache:
                         cblmstr += ' cblm="'+'||'.join(add_to_cache)
                         cblmstr += '"/>'
 		return cblmstr
+
+
+        def get_cblm_reset(self):
+                cblmstr = ''
+		cblmstr = '<dlt type="cblm"'
+		if self.cblm_id != '':
+			cblmstr += ' id="' + self.cblm_id + '"'
+		cblmstr += ' cblm-command="clear"/>'
+		return cblmstr
+
+        def get_cbtm_reset(self):
+                cbtmstr = ''
+                cbtmstr = '<dlt type="cbtm"'
+                if self.cbtm_id != '':
+                        cbtmstr += ' id="' + self.cbtm_id + '"'
+                cbtmstr += ' cbtm-command="clear"/>'
+                return cbtmstr
+
 
 
         def get_cbtm_annotation(self):
