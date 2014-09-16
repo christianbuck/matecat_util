@@ -288,3 +288,5 @@ if __name__ == "__main__":
     process_line("foo<a></b>")
     process_line("<a><b></a></b>")
     process_line("<a><b>foo</a></b>")
+    process_line("<a first-attr=1 second-attr=2 attr-wo-value><b>foo</b attr-at-b-close></a attr-at-a-close=1>")
+    process_line("<a><b>one</b> <b>two</b> three</a>")
