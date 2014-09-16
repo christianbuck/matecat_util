@@ -2,6 +2,7 @@
 
 #map taken from resilientparser.py
 
+use strict;
 use constant     SPACE_UNDEFINED => -1;           # undefined (used for the inner words, but the first, of NONEMPTY tags
 use constant     SPACE_NO => 0;                   # ex: the<a>data
 use constant     SPACE_ONLY_BEFORE => 1;          # ex: the <a>data
@@ -23,7 +24,7 @@ use Getopt::Long;
 # parameter variables
 my $help = undef;
 #my $enc = $MATECAT_ENC;
-my $enc = UTF8;
+my $enc = 'UTF8';
 my $collapse = 0;
 my $escape = 0;
 my $bflag = 0;
@@ -63,7 +64,11 @@ if ($bflag){ $| = 1; }
 
 ### insert here the code
 
+my $err = 0; # global error counter
+my $nr = 0; # line counter
+
 while (my $line=<STDIN>){
+        $nr++;
 	chomp($line);
 	my $passthrough = "";
 	my $trans = "";
@@ -162,14 +167,22 @@ while (my $line=<STDIN>){
 		}
 	}
 
+# going through output words and putting tags there from the source
+        my %xmlused = (); # record if we have implanted all the tags
         for (my $i=0; $i < scalar(@trgwords); $i+=2){
 		my $srcidx = $trgwords[$i+1];
 		if ($srcidx != -1 && defined($xml{$srcidx})){
+                        $xmlused{$srcidx}++;
                         $out .= $xml{$srcidx}.$trgwords[$i].$endxml{$srcidx};
 		}else{
 			$out .= "$trgwords[$i] ";
 		}
 	}
+        foreach my $srcidx (keys %xml) {
+          next if $xmlused{$srcidx};
+          print STDERR "$nr:Did not reimplant the tags $xml{$srcidx} $endxml{$srcidx}\n";
+          $err++;
+        }
 
 # collapse tags
 	if ($collapse){
@@ -218,3 +231,5 @@ while (my $line=<STDIN>){
 	if ($printpassthrough){ print "$passthrough"; }
 	print "$out\n";
 }
+
+exit 1 if $err;
