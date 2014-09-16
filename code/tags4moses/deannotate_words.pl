@@ -166,23 +166,24 @@ while (my $line=<STDIN>){
 
 #reconctructing the tagged output
 	my $out ="";
+        my %xmlused = (); # record if we have implanted all the tags
 
 	#adding tags not associated to any source word
         for (my $i=0; $i < scalar(@tags); $i++){
 		my ($idx,$value,$type,$spacetype) = ($tags[$i] =~ /(\-?\d+)\#(.*?)\#(\d+)\#(\-?\d+)$/);
 		if ($idx == -1 && defined($xml{$idx})){
+                        $xmlused{$idx} = 1; # not incrementing here, just setting to 1
                         $out = $xml{$idx}.$endxml{$idx};
 		}
 	}
 
 # going through output words and putting tags there from the source
-        my %xmlused = (); # record if we have implanted all the tags
         my $used_up_to = -1; # record which source words have already been considered
         for (my $i=0; $i < scalar(@trgwords); $i+=2){
 		my $srcidx = $trgwords[$i+1];
                 if ($srcidx != -1 && $used_up_to < $srcidx && $force_insert_all) {
+                  $used_up_to = 0 if $used_up_to == -1;
                   for (my $j=$used_up_to; $j <= $srcidx; $j++) {
-                    next if $j == -1;
                     if (defined $xml{$j} && !$to_be_covered{$j}) {
                       # the source word $j has a tag and is not going to be emitted
                       $xmlused{$j}++;
@@ -210,11 +211,11 @@ while (my $line=<STDIN>){
 		}
 	}
         foreach my $srcidx (keys %xml) {
-          if ($xmlused{$srcidx} == 0) {
-            print STDERR "$nr:Did not reimplant the tags $xml{$srcidx} $endxml{$srcidx}\n";
+          if (!defined $xmlused{$srcidx} || $xmlused{$srcidx} == 0) {
+            print STDERR "$nr:Did not reimplant the tag(s) (belonging to source token $srcidx): $xml{$srcidx} $endxml{$srcidx}\n";
             $err++;
           } elsif ($xmlused{$srcidx} > 1 && $avoid_duplicate_insertion) {
-            print STDERR "$nr:BUG: tags reimplanted more than once: $xml{$srcidx} $endxml{$srcidx}\n";
+            print STDERR "$nr:BUG: Tags reimplanted more than once ($xmlused{$srcidx} times): $xml{$srcidx} $endxml{$srcidx}\n";
           }
         }
 
