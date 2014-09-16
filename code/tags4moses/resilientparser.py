@@ -23,6 +23,7 @@ class TagTypes():
     # two additional types to handle broken markup:
     OPENED_BUT_UNCLOSED = 3        # ex: <a>
     CLOSED_BUT_UNOPENED = 4        # ex: </a>
+    # extra types for some moses magic
     NOTRANSLATE = 5                # ex: <span class="notranslate"...>xxx</span>
     FORCETRANSLATE = 6             # ex: <span class="forcetranslate"...>xxx</span>
 
@@ -290,3 +291,10 @@ if __name__ == "__main__":
     process_line("<a><b>foo</a></b>")
     process_line("<a first-attr=1 second-attr=2 attr-wo-value><b>foo</b attr-at-b-close></a attr-at-a-close=1>")
     process_line("<a><b>one</b> <b>two</b> three</a>")
+    process_line("a b <empty></empty> c")
+    process_line("a b <solo/> c")
+    process_line("a b <ctag> c </ctag>")
+    process_line("a b <unclosed> c")
+    process_line("a b c </unopened>")
+    process_line("a b <ctag> <solo-in-ctag/> c </ctag>")
+    process_line("a b <solo-before-ctag/> <ctag> c </ctag>")
