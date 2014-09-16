@@ -29,6 +29,8 @@ my $collapse = 0;
 my $escape = 0;
 my $bflag = 0;
 my $printpassthrough = 0;
+my $force_insert_all = 0;
+my $avoid_duplicate_insertion = 0;
 
 # parameter definition
 GetOptions(
@@ -38,6 +40,8 @@ GetOptions(
   "encoding=s" => \$enc,
   "collapse" => \$collapse,
   "escape" => \$escape,
+  "force-insert-all" => \$force_insert_all,
+  "avoid-duplicate-insertion" => \$avoid_duplicate_insertion,
 ) or exit(1);
 
 my $required_params = 0; # number of required free parameters
@@ -46,12 +50,14 @@ my $optional_params = 5; # maximum number of optional free parameters
 # command description
 sub Usage(){
 	warn "Usage: deannotate_words.pl [options] < input > output\n";
-	warn "	-help 	\tprint this help\n";
-	warn "  -b      \tdisable Perl buffering.\n";
-	warn "  -p      \tprint passthrough xml tag\n";
-	warn "	-encoding=<type> 	\tinput and output encoding type\n";
-	warn "	-collapse 	\tenable collapsing of adjacent tags\n";
-	warn "	-escape 	\tescape \n";
+	warn "	-help \tprint this help\n";
+	warn "  -b    \tdisable Perl buffering.\n";
+	warn "  -p    \tprint passthrough xml tag\n";
+	warn "	-encoding=<type> \tinput and output encoding type\n";
+	warn "	-collapse \tenable collapsing of adjacent tags\n";
+	warn "	-escape   \tescape \n";
+        warn "  -force-insert-all\tmake sure no tag is dropped\n";
+        warn "  -avoid-duplicate-insertion\tmake sure no tag is inserted twice\n";
 
 }
 
@@ -82,8 +88,10 @@ while (my $line=<STDIN>){
 #parsing translation
 	my @trgwords = split (/[ \t]+/, $trans);
 	# even entries contain words, odd entries contain word-alignemnt
+        my %to_be_covered; # record which source words will be eventually covered
 	for (my $i=0; $i < scalar(@trgwords); $i+=2){
 		$trgwords[$i+1] =~ s/\|//g; #remove pipeline from word alignemnt
+                $to_be_covered{$trgwords[$i+1]} = 1; # this source word will be covered
 	}
 
 #parsing passthrough
@@ -169,9 +177,32 @@ while (my $line=<STDIN>){
 
 # going through output words and putting tags there from the source
         my %xmlused = (); # record if we have implanted all the tags
+        my $used_up_to = -1; # record which source words have already been considered
         for (my $i=0; $i < scalar(@trgwords); $i+=2){
 		my $srcidx = $trgwords[$i+1];
+                if ($srcidx != -1 && $used_up_to < $srcidx && $force_insert_all) {
+                  for (my $j=$used_up_to; $j <= $srcidx; $j++) {
+                    next if $j == -1;
+                    if (defined $xml{$j} && !$to_be_covered{$j}) {
+                      # the source word $j has a tag and is not going to be emitted
+                      $xmlused{$j}++;
+                      $out .= "$xml{$j}$endxml{$j}";
+                    }
+                  }
+                  $used_up_to = $srcidx;
+                }
+                my $do_implant = 0;
 		if ($srcidx != -1 && defined($xml{$srcidx})){
+                        $do_implant = 1;
+                        if ($xmlused{$srcidx}) {
+                          if ($avoid_duplicate_insertion) {
+                            $do_implant = 0;
+                          } else {
+                            print STDERR "$nr: Warning, implanting a tag that was already implanted: $xml{$srcidx} $endxml{$srcidx}\n"
+                          }
+                        }
+                }
+                if ($do_implant) {
                         $xmlused{$srcidx}++;
                         $out .= $xml{$srcidx}.$trgwords[$i].$endxml{$srcidx};
 		}else{
@@ -179,9 +210,12 @@ while (my $line=<STDIN>){
 		}
 	}
         foreach my $srcidx (keys %xml) {
-          next if $xmlused{$srcidx};
-          print STDERR "$nr:Did not reimplant the tags $xml{$srcidx} $endxml{$srcidx}\n";
-          $err++;
+          if ($xmlused{$srcidx} == 0) {
+            print STDERR "$nr:Did not reimplant the tags $xml{$srcidx} $endxml{$srcidx}\n";
+            $err++;
+          } elsif ($xmlused{$srcidx} > 1 && $avoid_duplicate_insertion) {
+            print STDERR "$nr:BUG: tags reimplanted more than once: $xml{$srcidx} $endxml{$srcidx}\n";
+          }
         }
 
 # collapse tags
