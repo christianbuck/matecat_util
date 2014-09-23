@@ -5,6 +5,10 @@ import os
 import re
 import time
 import multiprocessing
+import string
+import random
+def id_generator(size=6, chars=string.ascii_uppercase + string.digits):
+  return ''.join(random.choice(chars) for _ in range(size))
 
 #Example output from mgiza:
 """# Sentence pair (1) source length 1 target length 1 alignment score : 9.99e-15
@@ -19,6 +23,7 @@ class OnlineMGiza(object):
         self.devnull = open(os.devnull, "w")
         self.proc = None
         self.ready = False
+        self.logfile_prefix = logfile
         self.logfile = logfile
         print "trying to match sourcevocabularyfile against %s" % commandline
         result = re.match(r".+sourcevocabularyfile (\S+) .+",commandline)
@@ -62,7 +67,8 @@ class OnlineMGiza(object):
     def __restart(self):
         if self.proc:
             self.proc.communicate("EOA\n")
-        if self.logfile:
+        if self.logfile_prefix:
+            self.logfile = "%s.%s" % (self.logfile_prefix, id_generator())
             err = open(self.logfile,"wb")
         else:
             err = self.devnull
@@ -120,7 +126,7 @@ class OnlineMGiza(object):
           ret = manager.dict()
           p = multiprocessing.Process(target=self.__process, args=(unicode_pair,ret))
           p.start()
-          p.join(1) # wait for one second max
+          p.join(2) # wait for two seconds max
 
           # success
           if not p.is_alive():
